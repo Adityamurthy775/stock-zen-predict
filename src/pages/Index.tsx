@@ -24,6 +24,7 @@ const Index = () => {
     modelMetrics,
     news,
     loading,
+    marketStatus,
     selectStock,
     addStock,
     removeStock,
@@ -42,7 +43,7 @@ const Index = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground">StockPredict AI</h1>
-                <p className="text-xs text-muted-foreground">ML-Powered Market Predictions</p>
+                <p className="text-xs text-muted-foreground">NSE/BSE ML-Powered Predictions</p>
               </div>
             </div>
             <MarketStatusIndicator />
@@ -96,11 +97,13 @@ const Index = () => {
                       stock={selectedStock}
                       timeSeries={timeSeries}
                       predictionLine={predictionLine}
+                      isMarketClosed={!marketStatus.isOpen}
                     />
                     <PredictionPanel
                       prediction={prediction}
                       period={predictionPeriod}
                       onPeriodChange={changePredictionPeriod}
+                      isMarketClosed={!marketStatus.isOpen}
                     />
                     <NewsSection news={news} />
                   </TabsContent>
@@ -110,6 +113,7 @@ const Index = () => {
                       prediction={prediction}
                       period={predictionPeriod}
                       onPeriodChange={changePredictionPeriod}
+                      isMarketClosed={!marketStatus.isOpen}
                     />
                   </TabsContent>
 

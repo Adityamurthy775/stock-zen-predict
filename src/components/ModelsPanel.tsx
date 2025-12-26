@@ -1,4 +1,4 @@
-import { Brain, Activity, Target, Calendar } from 'lucide-react';
+import { Brain, Calendar } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import type { ModelMetrics } from '@/types/stock';
 import { cn } from '@/lib/utils';
@@ -24,12 +24,17 @@ export function ModelsPanel({ metrics }: ModelsPanelProps) {
       <div className="space-y-6">
         {metrics.map((model) => (
           <div key={model.name} className="bg-secondary rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-2">
               <h4 className="font-semibold text-foreground">{model.name}</h4>
               <span className={cn("text-2xl font-bold font-mono", getAccuracyColor(model.accuracy))}>
                 {model.accuracy.toFixed(1)}%
               </span>
             </div>
+            
+            {/* Model Description */}
+            <p className="text-sm text-muted-foreground mb-3 italic">
+              {model.description}
+            </p>
             
             <Progress value={model.accuracy} className="h-2 mb-4" />
             

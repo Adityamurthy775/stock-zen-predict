@@ -37,6 +37,7 @@ export interface Prediction {
 
 export interface ModelMetrics {
   name: string;
+  description: string;
   accuracy: number;
   mse: number;
   mae: number;
@@ -53,9 +54,10 @@ export interface NewsItem {
   sentiment: 'positive' | 'negative' | 'neutral';
   publishedAt: string;
   url: string;
+  image?: string | null;
 }
 
-export type PredictionPeriod = '1d' | '5d' | '1m' | '3m';
+export type PredictionPeriod = '1d' | '5d' | '1m' | '3m' | '6m';
 
 export interface MarketStatus {
   isOpen: boolean;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { fetchStockQuote, fetchTimeSeries, DEFAULT_STOCKS, COMMODITIES } from '@/services/stockService';
-import { generateMockPrediction, getMockModelMetrics, getMockNews, generatePredictionLine } from '@/services/predictionService';
+import { fetchStockQuote, fetchTimeSeries, fetchNews, DEFAULT_STOCKS } from '@/services/stockService';
+import { generateMockPrediction, getMockModelMetrics, generatePredictionLine } from '@/services/predictionService';
+import { useMarketStatus } from '@/hooks/useMarketStatus';
 import type { Stock, TimeSeriesPoint, Prediction, ModelMetrics, NewsItem, PredictionPeriod } from '@/types/stock';
 
 export function useStockData() {
@@ -14,6 +15,8 @@ export function useStockData() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  const marketStatus = useMarketStatus();
 
   // Fetch all tracked stocks
   const fetchAllStocks = useCallback(async () => {
@@ -48,30 +51,42 @@ export function useStockData() {
       const series = await fetchTimeSeries(selectedStock.symbol, '1day', 60);
       setTimeSeries(series);
       
-      // Generate prediction
-      const pred = generateMockPrediction(
-        selectedStock.symbol,
-        selectedStock.price,
-        predictionPeriod
-      );
-      setPrediction(pred);
-      
-      // Generate prediction line for chart
-      if (series.length > 0) {
-        const lastPoint = series[series.length - 1];
-        const predLine = generatePredictionLine(lastPoint, pred, predictionPeriod);
-        setPredictionLine(predLine);
+      // Generate prediction only if market is open
+      if (marketStatus.isOpen) {
+        const pred = generateMockPrediction(
+          selectedStock.symbol,
+          selectedStock.price,
+          predictionPeriod
+        );
+        setPrediction(pred);
+        
+        // Generate prediction line for chart
+        if (series.length > 0) {
+          const lastPoint = series[series.length - 1];
+          const predLine = generatePredictionLine(lastPoint, pred, predictionPeriod);
+          setPredictionLine(predLine);
+        }
+      } else {
+        // Market closed - show prediction panel but not on chart
+        const pred = generateMockPrediction(
+          selectedStock.symbol,
+          selectedStock.price,
+          predictionPeriod
+        );
+        setPrediction(pred);
+        setPredictionLine([]); // No prediction line on chart when market is closed
       }
       
-      // Get news
-      setNews(getMockNews(selectedStock.symbol));
+      // Fetch real news from Finnhub
+      const newsData = await fetchNews(selectedStock.symbol);
+      setNews(newsData);
       
       // Get model metrics
       setModelMetrics(getMockModelMetrics());
     } catch (err) {
       console.error('Error fetching stock details:', err);
     }
-  }, [selectedStock, predictionPeriod]);
+  }, [selectedStock, predictionPeriod, marketStatus.isOpen]);
 
   // Select a stock
   const selectStock = useCallback((stock: Stock) => {
@@ -135,6 +150,7 @@ export function useStockData() {
     news,
     loading,
     error,
+    marketStatus,
     selectStock,
     addStock,
     removeStock,

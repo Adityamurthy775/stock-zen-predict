@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Stock, TimeSeriesPoint } from "@/types/stock";
+import type { Stock, TimeSeriesPoint, NewsItem } from "@/types/stock";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -12,7 +12,7 @@ export async function fetchStockQuote(symbol: string): Promise<Stock | null> {
       },
       body: JSON.stringify({
         action: 'quote',
-        symbol: symbol.toUpperCase(),
+        symbol: symbol,
       }),
     });
 
@@ -37,7 +37,7 @@ export async function fetchStockQuote(symbol: string): Promise<Stock | null> {
       open: parseFloat(data.open),
       high: parseFloat(data.high),
       low: parseFloat(data.low),
-      currency: data.currency || 'USD',
+      currency: data.currency || 'INR',
     };
   } catch (error) {
     console.error('Error fetching stock quote:', error);
@@ -58,7 +58,7 @@ export async function fetchTimeSeries(
       },
       body: JSON.stringify({
         action: 'time_series',
-        symbol: symbol.toUpperCase(),
+        symbol: symbol,
         interval,
         outputsize,
       }),
@@ -111,7 +111,7 @@ export async function searchSymbols(query: string): Promise<Array<{symbol: strin
       return [];
     }
 
-    return data.data.slice(0, 10).map((item: any) => ({
+    return data.data.slice(0, 15).map((item: any) => ({
       symbol: item.symbol,
       name: item.instrument_name,
       type: item.instrument_type,
@@ -123,20 +123,51 @@ export async function searchSymbols(query: string): Promise<Array<{symbol: strin
   }
 }
 
-// Default stocks to track
+export async function fetchNews(symbol?: string): Promise<NewsItem[]> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/stock-data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'news',
+        symbol: symbol,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch news');
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      console.error('News API error:', data.error);
+      return [];
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error fetching news:', error);
+    return [];
+  }
+}
+
+// Default Indian stocks to track (NSE listed)
 export const DEFAULT_STOCKS = [
-  'AAPL',
-  'GOOGL', 
-  'MSFT',
-  'TSLA',
-  'AMZN',
-  'NVDA',
-  'META',
-  'NFLX',
+  'RELIANCE:NSE',
+  'TCS:NSE', 
+  'INFY:NSE',
+  'HDFCBANK:NSE',
+  'ICICIBANK:NSE',
+  'WIPRO:NSE',
+  'SBIN:NSE',
+  'BHARTIARTL:NSE',
 ];
 
-// Commodities
+// Commodities with INR pricing
 export const COMMODITIES = [
-  'XAU/USD', // Gold
-  'XAG/USD', // Silver
+  'XAU/INR', // Gold in INR
+  'XAG/INR', // Silver in INR
 ];
