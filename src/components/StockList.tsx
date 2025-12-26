@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Search, Plus, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { Search, Plus, TrendingUp, TrendingDown } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { searchSymbols } from '@/services/stockService';
 import type { Stock } from '@/types/stock';
 import { cn } from '@/lib/utils';
@@ -19,7 +18,6 @@ export function StockList({
   selectedStock,
   onSelectStock,
   onAddStock,
-  onRemoveStock,
 }: StockListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{symbol: string; name: string; type: string; exchange: string}>>([]);
@@ -49,11 +47,11 @@ export function StockList({
   };
 
   const formatVolume = (volume: number) => {
-    if (volume >= 1000000000) {
-      return `${(volume / 1000000000).toFixed(1)}B`;
+    if (volume >= 10000000) {
+      return `${(volume / 10000000).toFixed(1)}Cr`;
     }
-    if (volume >= 1000000) {
-      return `${(volume / 1000000).toFixed(1)}M`;
+    if (volume >= 100000) {
+      return `${(volume / 100000).toFixed(1)}L`;
     }
     if (volume >= 1000) {
       return `${(volume / 1000).toFixed(1)}K`;
@@ -62,11 +60,15 @@ export function StockList({
   };
 
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-IN', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'INR',
       minimumFractionDigits: 2,
     }).format(price);
+  };
+
+  const formatSymbol = (symbol: string) => {
+    return symbol.split(':')[0];
   };
 
   return (
@@ -81,7 +83,7 @@ export function StockList({
         <div className="relative">
           <Input
             type="text"
-            placeholder="Search stocks to track..."
+            placeholder="Search NSE/BSE stocks..."
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             className="bg-secondary border-border text-foreground placeholder:text-muted-foreground"
@@ -89,18 +91,19 @@ export function StockList({
           
           {/* Search Results Dropdown */}
           {searchResults.length > 0 && (
-            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-card overflow-hidden">
+            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-card overflow-hidden max-h-[300px] overflow-y-auto">
               {searchResults.map((result) => (
                 <button
-                  key={result.symbol}
+                  key={`${result.symbol}-${result.exchange}`}
                   onClick={() => handleAddStock(result.symbol)}
                   className="w-full px-4 py-3 text-left hover:bg-secondary transition-colors flex items-center justify-between"
                 >
                   <div>
                     <span className="font-semibold text-foreground">{result.symbol}</span>
-                    <span className="text-sm text-muted-foreground ml-2">{result.name}</span>
+                    <span className="text-xs text-muted-foreground ml-2">({result.exchange})</span>
+                    <p className="text-sm text-muted-foreground truncate max-w-[200px]">{result.name}</p>
                   </div>
-                  <Plus className="w-4 h-4 text-gain" />
+                  <Plus className="w-4 h-4 text-gain flex-shrink-0" />
                 </button>
               ))}
             </div>
@@ -108,7 +111,7 @@ export function StockList({
         </div>
         
         <p className="text-xs text-muted-foreground mt-2">
-          Search and add stocks to track their predictions
+          Search any NSE, BSE, or global stocks
         </p>
       </div>
 
@@ -137,7 +140,7 @@ export function StockList({
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-foreground">{stock.symbol}</span>
+                        <span className="font-bold text-foreground">{formatSymbol(stock.symbol)}</span>
                         <span className={cn(
                           "flex items-center text-sm font-medium",
                           isPositive ? "text-gain" : "text-loss"
@@ -150,7 +153,7 @@ export function StockList({
                           {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
                         </span>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-0.5">{stock.name}</p>
+                      <p className="text-sm text-muted-foreground mt-0.5 truncate max-w-[180px]">{stock.name}</p>
                       <p className="text-lg font-semibold text-foreground mt-1 font-mono tabular-nums">
                         {formatPrice(stock.price)}
                       </p>

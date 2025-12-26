@@ -38,16 +38,31 @@ export function NewsSection({ news }: NewsSectionProps) {
     return labels[category] || category;
   };
 
+  if (news.length === 0) {
+    return (
+      <div className="bg-card border border-border rounded-lg p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Newspaper className="w-5 h-5 text-muted-foreground" />
+          <h3 className="text-lg font-semibold text-foreground">Real-Time News</h3>
+        </div>
+        <p className="text-muted-foreground text-center py-8">
+          No news available for this stock. Try a different stock symbol.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-card border border-border rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Newspaper className="w-5 h-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold text-foreground">Real-Time News</h3>
+          <span className="px-2 py-0.5 bg-gain/20 text-gain text-xs font-medium rounded">LIVE</span>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Clock className="w-4 h-4" />
-          Updated {new Date().toLocaleTimeString()}
+          Updated {new Date().toLocaleTimeString('en-IN')}
         </div>
       </div>
       
@@ -61,9 +76,9 @@ export function NewsSection({ news }: NewsSectionProps) {
         </TabsList>
         
         <TabsContent value={activeCategory} className="mt-0">
-          <div className="space-y-4">
+          <div className="space-y-4 max-h-[400px] overflow-y-auto">
             {filteredNews.map((item) => (
-              <article key={item.id} className="border-l-2 border-muted pl-4 py-2">
+              <article key={item.id} className="border-l-2 border-muted pl-4 py-2 hover:bg-secondary/50 rounded-r transition-colors">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-secondary text-foreground">
                     {getCategoryLabel(item.category)}
@@ -81,12 +96,17 @@ export function NewsSection({ news }: NewsSectionProps) {
                   <span className="text-xs text-muted-foreground ml-auto">{formatTime(item.publishedAt)}</span>
                 </div>
                 
-                <h4 className="font-semibold text-foreground mb-1">{item.title}</h4>
-                <p className="text-sm text-muted-foreground mb-2">{item.summary}</p>
+                <h4 className="font-semibold text-foreground mb-1 line-clamp-2">{item.title}</h4>
+                <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.summary}</p>
                 
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">{item.source}</span>
-                  <a href={item.url} className="text-sm text-primary hover:underline flex items-center gap-1">
+                  <a 
+                    href={item.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-sm text-primary hover:underline flex items-center gap-1"
+                  >
                     Read more <ExternalLink className="w-3 h-3" />
                   </a>
                 </div>

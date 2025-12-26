@@ -1,4 +1,4 @@
-import { Calendar, TrendingUp, TrendingDown, Target } from 'lucide-react';
+import { Calendar, TrendingUp, TrendingDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
 import type { Prediction, PredictionPeriod } from '@/types/stock';
@@ -8,18 +8,20 @@ interface PredictionPanelProps {
   prediction: Prediction;
   period: PredictionPeriod;
   onPeriodChange: (period: PredictionPeriod) => void;
+  isMarketClosed?: boolean;
 }
 
-export function PredictionPanel({ prediction, period, onPeriodChange }: PredictionPanelProps) {
+export function PredictionPanel({ prediction, period, onPeriodChange, isMarketClosed }: PredictionPanelProps) {
   const isPositive = prediction.changePercent >= 0;
   
-  const formatPrice = (price: number) => `$${price.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  const formatPrice = (price: number) => `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
   
   const periodLabels: Record<PredictionPeriod, string> = {
     '1d': '1 Day',
     '5d': '5 Days',
     '1m': '1 Month',
     '3m': 'Quarterly',
+    '6m': 'Half Yearly',
   };
 
   const getConfidenceLabel = (confidence: number) => {
@@ -34,6 +36,11 @@ export function PredictionPanel({ prediction, period, onPeriodChange }: Predicti
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold text-foreground">Next Day Closing Price</h3>
+          {isMarketClosed && (
+            <span className="px-2 py-1 rounded bg-loss/20 text-loss text-xs font-medium">
+              Market Closed
+            </span>
+          )}
         </div>
         
         <div className="flex items-center gap-3">
@@ -46,6 +53,7 @@ export function PredictionPanel({ prediction, period, onPeriodChange }: Predicti
               <SelectItem value="5d">5 Days</SelectItem>
               <SelectItem value="1m">1 Month</SelectItem>
               <SelectItem value="3m">Quarterly</SelectItem>
+              <SelectItem value="6m">Half Yearly</SelectItem>
             </SelectContent>
           </Select>
           
@@ -64,7 +72,7 @@ export function PredictionPanel({ prediction, period, onPeriodChange }: Predicti
       </div>
       
       <p className="text-sm text-muted-foreground mb-4">
-        Predicted for {new Date(prediction.targetDate).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+        Predicted for {new Date(prediction.targetDate).toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' })}
       </p>
       
       {/* Predicted Price */}

@@ -10,11 +10,12 @@ export function generateMockPrediction(
   const volatility = 0.02 + Math.random() * 0.03; // 2-5% volatility
   const trend = Math.random() > 0.5 ? 1 : -1;
   
-  const periodDays = {
+  const periodDays: Record<PredictionPeriod, number> = {
     '1d': 1,
     '5d': 5,
     '1m': 30,
     '3m': 90,
+    '6m': 180,
   };
   
   const days = periodDays[period];
@@ -41,11 +42,12 @@ export function generateMockPrediction(
   };
 }
 
-// Mock model metrics - placeholder for external ML API
+// Model metrics with descriptions
 export function getMockModelMetrics(): ModelMetrics[] {
   return [
     {
       name: 'LSTM Neural Network',
+      description: 'Captures long-term temporal dependencies in sequential price data for trend prediction.',
       accuracy: 84.2,
       mse: 0.0023,
       mae: 0.0156,
@@ -54,6 +56,7 @@ export function getMockModelMetrics(): ModelMetrics[] {
     },
     {
       name: 'CNN Pattern Recognition',
+      description: 'Identifies chart patterns and visual signals using convolutional filters on price data.',
       accuracy: 81.5,
       mse: 0.0031,
       mae: 0.0189,
@@ -62,6 +65,7 @@ export function getMockModelMetrics(): ModelMetrics[] {
     },
     {
       name: 'Logistic Regression',
+      description: 'Binary classification model for predicting market direction (up/down) based on features.',
       accuracy: 72.8,
       mse: 0.0052,
       mae: 0.0245,
@@ -70,6 +74,7 @@ export function getMockModelMetrics(): ModelMetrics[] {
     },
     {
       name: 'Sentiment Analysis',
+      description: 'Analyzes news and social media sentiment to predict market mood and price movements.',
       accuracy: 68.5,
       mse: 0.0078,
       mae: 0.0312,
@@ -77,55 +82,6 @@ export function getMockModelMetrics(): ModelMetrics[] {
       lastTrained: '2024-12-17',
     },
   ];
-}
-
-// Mock news data - placeholder for news API integration
-export function getMockNews(symbol: string): NewsItem[] {
-  const categories: NewsItem['category'][] = ['earnings', 'products', 'market', 'analyst'];
-  const sentiments: NewsItem['sentiment'][] = ['positive', 'negative', 'neutral'];
-  
-  const newsTemplates = [
-    {
-      category: 'products' as const,
-      sentiment: 'positive' as const,
-      title: `${symbol} Unveils Revolutionary AI Features in Latest Product Line`,
-      summary: `${symbol} announces breakthrough AI capabilities across its product lineup, sending stock soaring.`,
-    },
-    {
-      category: 'analyst' as const,
-      sentiment: 'positive' as const,
-      title: `Analysts Upgrade ${symbol} to "Strong Buy" Following Stellar Quarter`,
-      summary: `Major financial institutions raise price targets citing strong sales in emerging markets.`,
-    },
-    {
-      category: 'earnings' as const,
-      sentiment: 'positive' as const,
-      title: `${symbol} Services Revenue Hits All-Time High`,
-      summary: `Subscription services drive record services revenue, exceeding market expectations.`,
-    },
-    {
-      category: 'market' as const,
-      sentiment: 'neutral' as const,
-      title: `${symbol} Trading Volume Surges Amid Market Volatility`,
-      summary: `Institutional investors increase positions as market sentiment shifts toward tech sector.`,
-    },
-    {
-      category: 'analyst' as const,
-      sentiment: 'negative' as const,
-      title: `${symbol} Faces Regulatory Scrutiny in Key Markets`,
-      summary: `New regulatory challenges emerge in European and Asian markets, creating uncertainty.`,
-    },
-  ];
-
-  const now = new Date();
-  
-  return newsTemplates.map((template, index) => ({
-    id: `news-${index}`,
-    ...template,
-    source: ['Reuters', 'Bloomberg', 'CNBC', 'WSJ', 'Financial Times'][index % 5],
-    publishedAt: new Date(now.getTime() - index * 15 * 60 * 1000).toISOString(),
-    url: '#',
-  }));
 }
 
 // Calculate prediction points for chart overlay
