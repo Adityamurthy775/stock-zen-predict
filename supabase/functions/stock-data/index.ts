@@ -23,6 +23,14 @@ serve(async (req) => {
     const TWELVE_DATA_URL = 'https://api.twelvedata.com';
     const FINNHUB_URL = 'https://finnhub.io/api/v1';
 
+    // Helper to format symbol for stockdata.org (add .NS for NSE stocks)
+    const formatSymbolForStockData = (sym: string): string => {
+      // If already has exchange suffix, return as-is
+      if (sym.includes('.')) return sym;
+      // Add .NS for NSE stocks
+      return `${sym}.NS`;
+    };
+
     if (action === 'quote') {
       // Use stockdata.org for accurate quotes
       if (!STOCKDATA_API_KEY) {
@@ -30,11 +38,14 @@ serve(async (req) => {
         throw new Error('StockData API key not configured');
       }
       
-      const url = `${STOCKDATA_URL}/data/quote?symbols=${symbol}&api_token=${STOCKDATA_API_KEY}`;
-      console.log(`Fetching quote from stockdata.org for ${symbol}`);
+      const formattedSymbol = formatSymbolForStockData(symbol);
+      const url = `${STOCKDATA_URL}/data/quote?symbols=${formattedSymbol}&api_token=${STOCKDATA_API_KEY}`;
+      console.log(`Fetching quote from stockdata.org for ${formattedSymbol}`);
       
       const response = await fetch(url);
       const data = await response.json();
+      
+      console.log('StockData API response:', JSON.stringify(data));
       
       if (data.error || !data.data || data.data.length === 0) {
         console.error('StockData API error:', data.error || 'No data returned');
@@ -78,8 +89,10 @@ serve(async (req) => {
       }
       
       const symbolList = symbols || symbol;
-      const url = `${STOCKDATA_URL}/data/quote?symbols=${symbolList}&api_token=${STOCKDATA_API_KEY}`;
-      console.log(`Fetching batch quotes for ${symbolList}`);
+      // Format all symbols for stockdata.org
+      const formattedSymbols = symbolList.split(',').map((s: string) => formatSymbolForStockData(s.trim())).join(',');
+      const url = `${STOCKDATA_URL}/data/quote?symbols=${formattedSymbols}&api_token=${STOCKDATA_API_KEY}`;
+      console.log(`Fetching batch quotes for ${formattedSymbols}`);
       
       const response = await fetch(url);
       const data = await response.json();
@@ -123,8 +136,10 @@ serve(async (req) => {
       
       const size = outputsize || 100;
       const int = interval || '1day';
-      const url = `${TWELVE_DATA_URL}/time_series?symbol=${symbol}&interval=${int}&outputsize=${size}&apikey=${TWELVE_DATA_API_KEY}`;
-      console.log(`Fetching time series for ${symbol}, interval=${int}, size=${size}`);
+      // For Twelve Data, use :NSE suffix for Indian stocks
+      const formattedSymbol = symbol.includes('.') ? symbol.replace('.NS', ':NSE') : `${symbol}:NSE`;
+      const url = `${TWELVE_DATA_URL}/time_series?symbol=${formattedSymbol}&interval=${int}&outputsize=${size}&apikey=${TWELVE_DATA_API_KEY}`;
+      console.log(`Fetching time series for ${formattedSymbol}, interval=${int}, size=${size}`);
       
       const response = await fetch(url);
       const data = await response.json();
