@@ -1,9 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
+type CachedQuote = { expiresAt: number; payload: unknown };
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Very small in-memory cache + cooldown to avoid hitting provider usage limits.
+// (Edge instances may restart; this is best-effort.)
+const quoteCache = new Map<string, CachedQuote>();
+let stockDataDisabledUntil = 0;
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -41,6 +48,15 @@ serve(async (req) => {
         );
       }
 
+      const now = Date.now();
+      const cacheKey = `quote:${symbol}`;
+      const cached = quoteCache.get(cacheKey);
+      if (cached && cached.expiresAt > now) {
+        return new Response(JSON.stringify(cached.payload), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       const toTwelveSymbol = (sym: string): string => {
         if (sym.includes(':')) return sym;
         if (sym.includes('.NS')) return sym.replace('.NS', ':NSE');
@@ -49,8 +65,16 @@ serve(async (req) => {
         return `${sym}:NSE`;
       };
 
-      // 1) StockData (best for live quotes) if available
-      if (STOCKDATA_API_KEY) {
+      const cacheAndReturn = (payload: unknown) => {
+        // cache for 30 seconds
+        quoteCache.set(cacheKey, { expiresAt: Date.now() + 30_000, payload });
+        return new Response(JSON.stringify(payload), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      };
+
+      // 1) StockData (best for live quotes) if available and not in cooldown
+      if (STOCKDATA_API_KEY && now >= stockDataDisabledUntil) {
         const formattedSymbol = formatSymbolForStockData(symbol);
         const url = `${STOCKDATA_URL}/data/quote?symbols=${encodeURIComponent(formattedSymbol)}&api_token=${STOCKDATA_API_KEY}`;
         console.log(`Fetching quote from stockdata.org for ${formattedSymbol}`);
@@ -58,9 +82,6 @@ serve(async (req) => {
         const response = await fetch(url);
         const data = await response.json();
 
-        // Typical error shapes:
-        // { error: { code: 'usage_limit_reached', message: '...' } }
-        // { meta: { requested: 1, returned: 0 }, data: [] }
         const returned = Array.isArray(data?.data) ? data.data.length : 0;
         const stockDataOk = !data?.error && returned > 0;
 
@@ -89,21 +110,24 @@ serve(async (req) => {
             is_market_open: quote.is_extended_hours_price ? false : true,
           };
 
-          return new Response(JSON.stringify(transformedQuote), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          return cacheAndReturn(transformedQuote);
         }
 
-        // If StockData failed, log and fall back.
-        console.error('StockData quote unavailable, falling back:', data?.error || data?.meta || 'unknown');
+        // If StockData failed, log and possibly cooldown.
+        const errCode = data?.error?.code;
+        if (errCode === 'usage_limit_reached') {
+          stockDataDisabledUntil = Date.now() + 60_000; // 1 min cooldown
+          console.error('StockData usage limit reached. Cooldown for 60s.');
+        } else {
+          console.error('StockData quote unavailable, falling back:', data?.error || data?.meta || 'unknown');
+        }
       }
 
       // 2) Twelve Data fallback
       if (!TWELVE_DATA_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: 'Live quote provider is rate-limited; please try again later.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return cacheAndReturn({
+          error: 'Live quote provider is rate-limited; please try again later.',
+        });
       }
 
       const twelveSymbol = toTwelveSymbol(symbol);
@@ -115,10 +139,7 @@ serve(async (req) => {
 
       if (data.status === 'error' || data.code) {
         console.error('Twelve Data quote error:', data.message || data.code);
-        return new Response(
-          JSON.stringify({ error: data.message || 'Failed to fetch quote' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return cacheAndReturn({ error: data.message || 'Failed to fetch quote' });
       }
 
       const transformedQuote = {
@@ -139,76 +160,85 @@ serve(async (req) => {
         fifty_two_week: data.fifty_two_week,
       };
 
-      return new Response(JSON.stringify(transformedQuote), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
+      return cacheAndReturn(transformedQuote);
     }
 
     if (action === 'batch_quote') {
-      // Batch quote from stockdata.org
-      if (!STOCKDATA_API_KEY) {
-        throw new Error('StockData API key not configured');
-      }
-      
+      // Batch quote (best-effort). Never throw to the client.
       const symbolList = symbols || symbol;
-      // Format all symbols for stockdata.org
-      const formattedSymbols = symbolList.split(',').map((s: string) => formatSymbolForStockData(s.trim())).join(',');
-      const url = `${STOCKDATA_URL}/data/quote?symbols=${formattedSymbols}&api_token=${STOCKDATA_API_KEY}`;
-      console.log(`Fetching batch quotes for ${formattedSymbols}`);
-      
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.error) {
-        throw new Error(data.error.message || 'Failed to fetch batch quotes');
+
+      // Prefer Twelve Data here to avoid StockData usage-limit bursts.
+      if (!TWELVE_DATA_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: 'Batch quotes unavailable (API key missing)' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
-      // Transform all quotes
-      const transformedQuotes = (data.data || []).map((quote: any) => ({
-        symbol: quote.ticker,
-        name: quote.name || quote.ticker,
-        exchange: quote.exchange_short || 'NSE',
-        currency: quote.currency || 'INR',
-        datetime: quote.last_trade_time || new Date().toISOString(),
-        open: quote.day_open,
-        high: quote.day_high,
-        low: quote.day_low,
-        close: quote.price,
-        volume: quote.volume,
-        previous_close: quote.previous_close_price,
-        change: quote.day_change,
-        percent_change: quote.change_percent,
-        fifty_two_week: {
-          low: quote['52_week_low'],
-          high: quote['52_week_high'],
-        },
-        market_cap: quote.market_cap,
-      }));
+      const toTwelveSymbol = (sym: string): string => {
+        if (sym.includes(':')) return sym;
+        if (sym.includes('.NS')) return sym.replace('.NS', ':NSE');
+        if (sym.includes('.BO')) return sym.replace('.BO', ':BSE');
+        return `${sym}:NSE`;
+      };
 
-      return new Response(JSON.stringify(transformedQuotes), {
+      const requested = symbolList.split(',').map((s: string) => s.trim()).filter(Boolean);
+      const results: any[] = [];
+
+      for (const sym of requested) {
+        const twelveSymbol = toTwelveSymbol(sym);
+        const url = `${TWELVE_DATA_URL}/quote?symbol=${encodeURIComponent(twelveSymbol)}&apikey=${TWELVE_DATA_API_KEY}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.status === 'error' || data.code) continue;
+        results.push({
+          symbol: data.symbol,
+          name: data.name,
+          exchange: data.exchange,
+          currency: data.currency || 'INR',
+          datetime: data.datetime,
+          open: data.open,
+          high: data.high,
+          low: data.low,
+          close: data.close,
+          volume: data.volume,
+          previous_close: data.previous_close,
+          change: data.change,
+          percent_change: data.percent_change,
+          is_market_open: data.is_market_open,
+          fifty_two_week: data.fifty_two_week,
+        });
+      }
+
+      return new Response(JSON.stringify(results), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'time_series' || action === 'history') {
-      // Use Twelve Data for historical data (stockdata.org requires paid plan for EOD)
+      // Use Twelve Data for historical data.
       if (!TWELVE_DATA_API_KEY) {
-        throw new Error('Twelve Data API key not configured');
+        return new Response(
+          JSON.stringify({ error: 'Historical data API key not configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
-      
+
       const size = outputsize || 100;
       const int = interval || '1day';
-      // For Twelve Data, use :NSE suffix for Indian stocks
       const formattedSymbol = symbol.includes('.') ? symbol.replace('.NS', ':NSE') : `${symbol}:NSE`;
-      const url = `${TWELVE_DATA_URL}/time_series?symbol=${formattedSymbol}&interval=${int}&outputsize=${size}&apikey=${TWELVE_DATA_API_KEY}`;
+      const url = `${TWELVE_DATA_URL}/time_series?symbol=${encodeURIComponent(formattedSymbol)}&interval=${encodeURIComponent(int)}&outputsize=${size}&apikey=${TWELVE_DATA_API_KEY}`;
       console.log(`Fetching time series for ${formattedSymbol}, interval=${int}, size=${size}`);
-      
+
       const response = await fetch(url);
       const data = await response.json();
-      
+
       if (data.status === 'error' || data.code) {
         console.error('Time series API error:', data.message || data.code);
-        throw new Error(data.message || 'Failed to fetch time series');
+        return new Response(
+          JSON.stringify({ error: data.message || 'Failed to fetch time series' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       return new Response(JSON.stringify(data), {
@@ -217,29 +247,62 @@ serve(async (req) => {
     }
 
     if (action === 'search') {
-      // Search symbols using stockdata.org
-      if (!STOCKDATA_API_KEY) {
-        throw new Error('StockData API key not configured');
-      }
-      
-      const url = `${STOCKDATA_URL}/entity/search?search=${symbol}&api_token=${STOCKDATA_API_KEY}`;
-      console.log(`Searching symbols for ${symbol}`);
-      
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.error) {
-        console.error('Search API error:', data.error);
-        throw new Error(data.error.message || 'Failed to search symbols');
+      // Search: try StockData first, fall back to Twelve Data (never throw).
+      if (!STOCKDATA_API_KEY && !TWELVE_DATA_API_KEY) {
+        return new Response(
+          JSON.stringify({ data: [], error: 'Search API key not configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
-      // Transform search results
+      if (STOCKDATA_API_KEY && Date.now() >= stockDataDisabledUntil) {
+        const url = `${STOCKDATA_URL}/entity/search?search=${encodeURIComponent(symbol)}&api_token=${STOCKDATA_API_KEY}`;
+        console.log(`Searching symbols (stockdata.org) for ${symbol}`);
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data?.error) {
+          const transformedResults = (data.data || []).slice(0, 15).map((item: any) => ({
+            symbol: item.symbol,
+            name: item.name || item.symbol,
+            type: item.type || 'Stock',
+            exchange: item.exchange?.short_name || item.exchange_short || 'Unknown',
+            country: item.country,
+          }));
+
+          return new Response(JSON.stringify({ data: transformedResults }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        if (data?.error?.code === 'usage_limit_reached') {
+          stockDataDisabledUntil = Date.now() + 60_000;
+          console.error('StockData usage limit reached during search. Cooldown for 60s.');
+        } else {
+          console.error('StockData search error, falling back:', data?.error);
+        }
+      }
+
+      // Twelve Data fallback
+      if (!TWELVE_DATA_API_KEY) {
+        return new Response(
+          JSON.stringify({ data: [], error: 'Search temporarily unavailable; please try again later.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const url = `${TWELVE_DATA_URL}/symbol_search?symbol=${encodeURIComponent(symbol)}&apikey=${TWELVE_DATA_API_KEY}`;
+      console.log(`Searching symbols (Twelve Data) for ${symbol}`);
+
+      const response = await fetch(url);
+      const data = await response.json();
+
       const transformedResults = (data.data || []).slice(0, 15).map((item: any) => ({
         symbol: item.symbol,
-        name: item.name || item.symbol,
-        type: item.type || 'Stock',
-        exchange: item.exchange?.short_name || item.exchange_short || 'Unknown',
-        country: item.country,
+        name: item.instrument_name,
+        type: item.instrument_type,
+        exchange: item.exchange,
       }));
 
       return new Response(JSON.stringify({ data: transformedResults }), {
@@ -297,12 +360,13 @@ serve(async (req) => {
     throw new Error('Invalid action specified');
 
   } catch (error) {
+    // Never surface provider/JSON issues as a 500 to the client — return a safe payload.
     console.error('Edge function error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      {
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }
