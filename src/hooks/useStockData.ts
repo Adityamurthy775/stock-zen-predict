@@ -3,6 +3,8 @@ import { fetchStockQuote, fetchTimeSeries, fetchNews, DEFAULT_STOCKS } from '@/s
 import { generateMockPrediction, getMockModelMetrics, generatePredictionLine } from '@/services/predictionService';
 import { useMarketStatus } from '@/hooks/useMarketStatus';
 import type { Stock, TimeSeriesPoint, Prediction, ModelMetrics, NewsItem, PredictionPeriod } from '@/types/stock';
+import type { PortfolioItem } from '@/components/Portfolio';
+import type { PriceAlert } from '@/components/Alerts';
 
 export function useStockData() {
   const [stocks, setStocks] = useState<Stock[]>([]);
@@ -16,7 +18,55 @@ export function useStockData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Portfolio state
+  const [portfolio, setPortfolio] = useState<PortfolioItem[]>(() => {
+    const saved = localStorage.getItem('stockPortfolio');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
+  // Alerts state
+  const [alerts, setAlerts] = useState<PriceAlert[]>(() => {
+    const saved = localStorage.getItem('stockAlerts');
+    return saved ? JSON.parse(saved) : [];
+  });
+  
   const marketStatus = useMarketStatus();
+
+  // Save portfolio to localStorage
+  useEffect(() => {
+    localStorage.setItem('stockPortfolio', JSON.stringify(portfolio));
+  }, [portfolio]);
+
+  // Save alerts to localStorage
+  useEffect(() => {
+    localStorage.setItem('stockAlerts', JSON.stringify(alerts));
+  }, [alerts]);
+
+  // Update portfolio current prices
+  useEffect(() => {
+    if (stocks.length > 0 && portfolio.length > 0) {
+      setPortfolio(prev => prev.map(item => {
+        const stock = stocks.find(s => s.symbol === item.symbol);
+        return stock ? { ...item, currentPrice: stock.price } : item;
+      }));
+    }
+  }, [stocks]);
+
+  // Check alerts
+  useEffect(() => {
+    if (stocks.length > 0 && alerts.length > 0) {
+      setAlerts(prev => prev.map(alert => {
+        const stock = stocks.find(s => s.symbol === alert.symbol);
+        if (!stock || !alert.isActive || alert.triggered) return alert;
+        
+        const triggered = alert.condition === 'above' 
+          ? stock.price >= alert.targetPrice
+          : stock.price <= alert.targetPrice;
+        
+        return { ...alert, currentPrice: stock.price, triggered };
+      }));
+    }
+  }, [stocks]);
 
   // Fetch all tracked stocks
   const fetchAllStocks = useCallback(async () => {
@@ -120,6 +170,43 @@ export function useStockData() {
     setPredictionPeriod(period);
   }, []);
 
+  // Portfolio management
+  const addToPortfolio = useCallback((item: Omit<PortfolioItem, 'currentPrice'>) => {
+    const stock = stocks.find(s => s.symbol === item.symbol);
+    setPortfolio(prev => [
+      ...prev,
+      { ...item, currentPrice: stock?.price || item.buyPrice }
+    ]);
+  }, [stocks]);
+
+  const removeFromPortfolio = useCallback((symbol: string) => {
+    setPortfolio(prev => prev.filter(item => item.symbol !== symbol));
+  }, []);
+
+  // Alerts management
+  const addAlert = useCallback((alert: Omit<PriceAlert, 'id' | 'currentPrice' | 'triggered'>) => {
+    const stock = stocks.find(s => s.symbol === alert.symbol);
+    setAlerts(prev => [
+      ...prev,
+      {
+        ...alert,
+        id: `alert-${Date.now()}`,
+        currentPrice: stock?.price || 0,
+        triggered: false,
+      }
+    ]);
+  }, [stocks]);
+
+  const removeAlert = useCallback((id: string) => {
+    setAlerts(prev => prev.filter(alert => alert.id !== id));
+  }, []);
+
+  const toggleAlert = useCallback((id: string) => {
+    setAlerts(prev => prev.map(alert => 
+      alert.id === id ? { ...alert, isActive: !alert.isActive } : alert
+    ));
+  }, []);
+
   // Initial fetch
   useEffect(() => {
     fetchAllStocks();
@@ -156,5 +243,14 @@ export function useStockData() {
     removeStock,
     changePredictionPeriod,
     refreshData: fetchAllStocks,
+    // Portfolio
+    portfolio,
+    addToPortfolio,
+    removeFromPortfolio,
+    // Alerts
+    alerts,
+    addAlert,
+    removeAlert,
+    toggleAlert,
   };
 }

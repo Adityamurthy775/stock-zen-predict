@@ -3,13 +3,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useStockData } from '@/hooks/useStockData';
 import { StockList } from '@/components/StockList';
 import { StockChart } from '@/components/StockChart';
+import { StockHistory } from '@/components/StockHistory';
 import { PredictionPanel } from '@/components/PredictionPanel';
 import { NewsSection } from '@/components/NewsSection';
 import { ModelsPanel } from '@/components/ModelsPanel';
 import { MarketStats } from '@/components/MarketStats';
 import { MarketStatusIndicator } from '@/components/MarketStatusIndicator';
+import { Portfolio } from '@/components/Portfolio';
+import { Alerts } from '@/components/Alerts';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp } from 'lucide-react';
+import { TrendingUp, Wallet, Bell } from 'lucide-react';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('chart');
@@ -29,6 +32,15 @@ const Index = () => {
     addStock,
     removeStock,
     changePredictionPeriod,
+    // Portfolio
+    portfolio,
+    addToPortfolio,
+    removeFromPortfolio,
+    // Alerts
+    alerts,
+    addAlert,
+    removeAlert,
+    toggleAlert,
   } = useStockData();
 
   return (
@@ -87,8 +99,16 @@ const Index = () => {
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="w-full justify-start bg-card border border-border">
                     <TabsTrigger value="chart">Chart</TabsTrigger>
+                    <TabsTrigger value="history">History</TabsTrigger>
                     <TabsTrigger value="prediction">Prediction</TabsTrigger>
-                    <TabsTrigger value="features">Features</TabsTrigger>
+                    <TabsTrigger value="portfolio" className="gap-2">
+                      <Wallet className="w-4 h-4" />
+                      Portfolio
+                    </TabsTrigger>
+                    <TabsTrigger value="alerts" className="gap-2">
+                      <Bell className="w-4 h-4" />
+                      Alerts
+                    </TabsTrigger>
                     <TabsTrigger value="models">Models</TabsTrigger>
                   </TabsList>
 
@@ -108,6 +128,13 @@ const Index = () => {
                     <NewsSection news={news} />
                   </TabsContent>
 
+                  <TabsContent value="history" className="mt-6">
+                    <StockHistory 
+                      timeSeries={timeSeries} 
+                      currency={selectedStock.currency}
+                    />
+                  </TabsContent>
+
                   <TabsContent value="prediction" className="mt-6">
                     <PredictionPanel
                       prediction={prediction}
@@ -117,13 +144,23 @@ const Index = () => {
                     />
                   </TabsContent>
 
-                  <TabsContent value="features" className="mt-6">
-                    <div className="bg-card border border-border rounded-lg p-6">
-                      <h3 className="text-lg font-semibold mb-4">Technical Indicators</h3>
-                      <p className="text-muted-foreground">
-                        Connect your ML backend to view extracted features like RSI, MACD, Bollinger Bands, and sentiment scores.
-                      </p>
-                    </div>
+                  <TabsContent value="portfolio" className="mt-6">
+                    <Portfolio
+                      stocks={stocks}
+                      portfolio={portfolio}
+                      onAddToPortfolio={addToPortfolio}
+                      onRemoveFromPortfolio={removeFromPortfolio}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="alerts" className="mt-6">
+                    <Alerts
+                      stocks={stocks}
+                      alerts={alerts}
+                      onAddAlert={addAlert}
+                      onRemoveAlert={removeAlert}
+                      onToggleAlert={toggleAlert}
+                    />
                   </TabsContent>
 
                   <TabsContent value="models" className="mt-6">

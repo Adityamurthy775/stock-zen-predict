@@ -29,19 +29,64 @@ export async function fetchStockQuote(symbol: string): Promise<Stock | null> {
     return {
       symbol: data.symbol,
       name: data.name,
-      price: parseFloat(data.close),
-      change: parseFloat(data.change),
-      changePercent: parseFloat(data.percent_change),
-      volume: parseInt(data.volume),
-      previousClose: parseFloat(data.previous_close),
-      open: parseFloat(data.open),
-      high: parseFloat(data.high),
-      low: parseFloat(data.low),
+      price: parseFloat(data.close) || 0,
+      change: parseFloat(data.change) || 0,
+      changePercent: parseFloat(data.percent_change) || 0,
+      volume: parseInt(data.volume) || 0,
+      previousClose: parseFloat(data.previous_close) || 0,
+      open: parseFloat(data.open) || 0,
+      high: parseFloat(data.high) || 0,
+      low: parseFloat(data.low) || 0,
       currency: data.currency || 'INR',
+      marketCap: data.market_cap,
+      fiftyTwoWeekHigh: data.fifty_two_week?.high,
+      fiftyTwoWeekLow: data.fifty_two_week?.low,
     };
   } catch (error) {
     console.error('Error fetching stock quote:', error);
     return null;
+  }
+}
+
+export async function fetchBatchQuotes(symbols: string[]): Promise<Stock[]> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/stock-data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'batch_quote',
+        symbols: symbols.join(','),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch batch quotes');
+    }
+
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    return (Array.isArray(data) ? data : []).map((item: any) => ({
+      symbol: item.symbol,
+      name: item.name,
+      price: parseFloat(item.close) || 0,
+      change: parseFloat(item.change) || 0,
+      changePercent: parseFloat(item.percent_change) || 0,
+      volume: parseInt(item.volume) || 0,
+      previousClose: parseFloat(item.previous_close) || 0,
+      open: parseFloat(item.open) || 0,
+      high: parseFloat(item.high) || 0,
+      low: parseFloat(item.low) || 0,
+      currency: item.currency || 'INR',
+    }));
+  } catch (error) {
+    console.error('Error fetching batch quotes:', error);
+    return [];
   }
 }
 
@@ -154,16 +199,16 @@ export async function fetchNews(symbol?: string): Promise<NewsItem[]> {
   }
 }
 
-// Default Indian stocks to track (NSE listed)
+// Default Indian stocks to track
 export const DEFAULT_STOCKS = [
-  'RELIANCE:NSE',
-  'TCS:NSE', 
-  'INFY:NSE',
-  'HDFCBANK:NSE',
-  'ICICIBANK:NSE',
-  'WIPRO:NSE',
-  'SBIN:NSE',
-  'BHARTIARTL:NSE',
+  'INFY',
+  'HDFCBANK', 
+  'TCS',
+  'RELIANCE',
+  'ICICIBANK',
+  'WIPRO',
+  'SBIN',
+  'BHARTIARTL',
 ];
 
 // Commodities with INR pricing
