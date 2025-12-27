@@ -12,6 +12,9 @@ export interface Stock {
   high: number;
   low: number;
   currency: string;
+  marketCap?: number;
+  fiftyTwoWeekHigh?: number;
+  fiftyTwoWeekLow?: number;
 }
 
 export interface TimeSeriesPoint {
