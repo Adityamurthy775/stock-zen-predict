@@ -72,18 +72,22 @@ export function useStockData() {
   const fetchAllStocks = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const allSymbols = [...DEFAULT_STOCKS];
-      const stockPromises = allSymbols.map(symbol => fetchStockQuote(symbol));
-      const results = await Promise.all(stockPromises);
-      
-      const validStocks = results.filter((stock): stock is Stock => stock !== null);
-      setStocks(validStocks);
-      
+
+      // Reduce API usage by fetching sequentially (prevents provider rate-limit bursts)
+      const results: Stock[] = [];
+      for (const sym of allSymbols) {
+        const quote = await fetchStockQuote(sym);
+        if (quote) results.push(quote);
+      }
+
+      setStocks(results);
+
       // Select first stock by default
-      if (validStocks.length > 0 && !selectedStock) {
-        setSelectedStock(validStocks[0]);
+      if (results.length > 0 && !selectedStock) {
+        setSelectedStock(results[0]);
       }
     } catch (err) {
       setError('Failed to fetch stock data');
