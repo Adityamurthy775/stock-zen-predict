@@ -32,49 +32,111 @@ serve(async (req) => {
     };
 
     if (action === 'quote') {
-      // Use stockdata.org for accurate quotes
-      if (!STOCKDATA_API_KEY) {
-        console.error('STOCKDATA_API_KEY not configured');
-        throw new Error('StockData API key not configured');
-      }
-      
-      const formattedSymbol = formatSymbolForStockData(symbol);
-      const url = `${STOCKDATA_URL}/data/quote?symbols=${formattedSymbol}&api_token=${STOCKDATA_API_KEY}`;
-      console.log(`Fetching quote from stockdata.org for ${formattedSymbol}`);
-      
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      console.log('StockData API response:', JSON.stringify(data));
-      
-      if (data.error || !data.data || data.data.length === 0) {
-        console.error('StockData API error:', data.error || 'No data returned');
-        throw new Error(data.error?.message || 'Failed to fetch quote');
+      // Quote: try stockdata.org first, fall back to Twelve Data if unavailable / rate-limited.
+      if (!STOCKDATA_API_KEY && !TWELVE_DATA_API_KEY) {
+        console.error('No market data provider keys configured');
+        return new Response(
+          JSON.stringify({ error: 'Market data API key not configured' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
-      const quote = data.data[0];
-      
-      // Transform to our format
+      const toTwelveSymbol = (sym: string): string => {
+        if (sym.includes(':')) return sym;
+        if (sym.includes('.NS')) return sym.replace('.NS', ':NSE');
+        if (sym.includes('.BO')) return sym.replace('.BO', ':BSE');
+        // Default to NSE
+        return `${sym}:NSE`;
+      };
+
+      // 1) StockData (best for live quotes) if available
+      if (STOCKDATA_API_KEY) {
+        const formattedSymbol = formatSymbolForStockData(symbol);
+        const url = `${STOCKDATA_URL}/data/quote?symbols=${encodeURIComponent(formattedSymbol)}&api_token=${STOCKDATA_API_KEY}`;
+        console.log(`Fetching quote from stockdata.org for ${formattedSymbol}`);
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        // Typical error shapes:
+        // { error: { code: 'usage_limit_reached', message: '...' } }
+        // { meta: { requested: 1, returned: 0 }, data: [] }
+        const returned = Array.isArray(data?.data) ? data.data.length : 0;
+        const stockDataOk = !data?.error && returned > 0;
+
+        if (stockDataOk) {
+          const quote = data.data[0];
+
+          const transformedQuote = {
+            symbol: quote.ticker,
+            name: quote.name || quote.ticker,
+            exchange: quote.exchange_short || 'NSE',
+            currency: quote.currency || 'INR',
+            datetime: quote.last_trade_time || new Date().toISOString(),
+            open: quote.day_open,
+            high: quote.day_high,
+            low: quote.day_low,
+            close: quote.price,
+            volume: quote.volume,
+            previous_close: quote.previous_close_price,
+            change: quote.day_change,
+            percent_change: quote.change_percent,
+            fifty_two_week: {
+              low: quote['52_week_low'],
+              high: quote['52_week_high'],
+            },
+            market_cap: quote.market_cap,
+            is_market_open: quote.is_extended_hours_price ? false : true,
+          };
+
+          return new Response(JSON.stringify(transformedQuote), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        // If StockData failed, log and fall back.
+        console.error('StockData quote unavailable, falling back:', data?.error || data?.meta || 'unknown');
+      }
+
+      // 2) Twelve Data fallback
+      if (!TWELVE_DATA_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: 'Live quote provider is rate-limited; please try again later.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const twelveSymbol = toTwelveSymbol(symbol);
+      const url = `${TWELVE_DATA_URL}/quote?symbol=${encodeURIComponent(twelveSymbol)}&apikey=${TWELVE_DATA_API_KEY}`;
+      console.log(`Fetching fallback quote from Twelve Data for ${twelveSymbol}`);
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status === 'error' || data.code) {
+        console.error('Twelve Data quote error:', data.message || data.code);
+        return new Response(
+          JSON.stringify({ error: data.message || 'Failed to fetch quote' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       const transformedQuote = {
-        symbol: quote.ticker,
-        name: quote.name || quote.ticker,
-        exchange: quote.exchange_short || 'NSE',
-        currency: quote.currency || 'INR',
-        datetime: quote.last_trade_time || new Date().toISOString(),
-        open: quote.day_open,
-        high: quote.day_high,
-        low: quote.day_low,
-        close: quote.price,
-        volume: quote.volume,
-        previous_close: quote.previous_close_price,
-        change: quote.day_change,
-        percent_change: quote.change_percent,
-        fifty_two_week: {
-          low: quote['52_week_low'],
-          high: quote['52_week_high'],
-        },
-        market_cap: quote.market_cap,
-        is_market_open: quote.is_extended_hours_price ? false : true,
+        symbol: data.symbol,
+        name: data.name,
+        exchange: data.exchange,
+        currency: data.currency || 'INR',
+        datetime: data.datetime,
+        open: data.open,
+        high: data.high,
+        low: data.low,
+        close: data.close,
+        volume: data.volume,
+        previous_close: data.previous_close,
+        change: data.change,
+        percent_change: data.percent_change,
+        is_market_open: data.is_market_open,
+        fifty_two_week: data.fifty_two_week,
       };
 
       return new Response(JSON.stringify(transformedQuote), {
