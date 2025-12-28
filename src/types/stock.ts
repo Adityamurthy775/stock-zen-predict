@@ -60,7 +60,8 @@ export interface NewsItem {
   image?: string | null;
 }
 
-export type PredictionPeriod = '1d' | '5d' | '1m' | '3m' | '6m';
+// Updated prediction periods: 1 day, 5 days, half month (15 days), quarterly (90 days)
+export type PredictionPeriod = '1d' | '5d' | '15d' | '3m';
 
 export interface MarketStatus {
   isOpen: boolean;
