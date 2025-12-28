@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { XAxis, YAxis, Tooltip, ResponsiveContainer, ComposedChart, Bar, Cell, Line, ReferenceLine } from 'recharts';
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, ComposedChart, Bar, Line } from 'recharts';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Stock, TimeSeriesPoint } from '@/types/stock';
@@ -12,50 +12,11 @@ interface StockChartProps {
   isMarketClosed?: boolean;
 }
 
-// Custom candlestick shape
-const CandlestickBar = (props: any) => {
-  const { x, y, width, height, payload } = props;
-  if (!payload) return null;
-  
-  const { open, close, high, low } = payload;
-  const isGreen = close >= open;
-  const color = isGreen ? 'hsl(var(--gain))' : 'hsl(var(--loss))';
-  
-  const bodyTop = Math.min(open, close);
-  const bodyBottom = Math.max(open, close);
-  
-  // Calculate positions relative to the chart
-  const yScale = props.yScale || ((v: number) => v);
-  
-  return (
-    <g>
-      {/* Wick (high to low line) */}
-      <line
-        x1={x + width / 2}
-        y1={yScale(high)}
-        x2={x + width / 2}
-        y2={yScale(low)}
-        stroke={color}
-        strokeWidth={1}
-      />
-      {/* Body */}
-      <rect
-        x={x + 2}
-        y={yScale(bodyBottom)}
-        width={Math.max(width - 4, 2)}
-        height={Math.max(Math.abs(yScale(bodyTop) - yScale(bodyBottom)), 1)}
-        fill={isGreen ? color : color}
-        stroke={color}
-        strokeWidth={1}
-      />
-    </g>
-  );
-};
-
 export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }: StockChartProps) {
   const [chartType, setChartType] = useState<'line' | 'candlestick'>('candlestick');
   
   const isPositive = stock.changePercent >= 0;
+  const currencySymbol = stock.currency === 'USD' ? '$' : '₹';
   
   // Prepare candlestick data with OHLC
   const candlestickData = timeSeries.map(point => ({
@@ -65,32 +26,47 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
     low: point.low,
     close: point.close,
     volume: point.volume,
-    // For candlestick bar height (body)
     bodyHeight: Math.abs(point.close - point.open),
     bodyBase: Math.min(point.open, point.close),
     isGreen: point.close >= point.open,
   }));
 
-  // Combine for line chart mode
+  // Get last actual price for connecting line
+  const lastActualPrice = timeSeries.length > 0 ? timeSeries[timeSeries.length - 1] : null;
+  const lastActualDate = lastActualPrice?.datetime || '';
+  const lastActualClose = lastActualPrice?.close || 0;
+
+  // Combine data for line chart with connection point between actual and predicted
   const lineChartData = [
     ...timeSeries.map(point => ({
       datetime: point.datetime,
       close: point.close,
       predicted: null as number | null,
+      connectionPoint: null as number | null,
     })),
-    ...predictionLine.map(point => ({
+    // Add connection point - this creates the dotted line from last actual to first prediction
+    ...(predictionLine.length > 0 && lastActualPrice ? [{
+      datetime: lastActualDate,
+      close: null as number | null,
+      predicted: null as number | null,
+      connectionPoint: lastActualClose,
+    }] : []),
+    ...predictionLine.map((point, idx) => ({
       datetime: point.datetime,
       close: null as number | null,
       predicted: point.predicted,
+      connectionPoint: idx === 0 ? point.predicted : null,
     })),
   ];
 
-  const formatPrice = (price: number) => `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  const formatPrice = (price: number) => `${currencySymbol}${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
 
   // Calculate Y domain for candlestick
   const allPrices = timeSeries.flatMap(p => [p.high, p.low]);
-  const minPrice = Math.min(...allPrices) * 0.995;
-  const maxPrice = Math.max(...allPrices) * 1.005;
+  const predictionPrices = predictionLine.map(p => p.predicted);
+  const allChartPrices = [...allPrices, ...predictionPrices].filter(Boolean);
+  const minPrice = allChartPrices.length > 0 ? Math.min(...allChartPrices) * 0.995 : 0;
+  const maxPrice = allChartPrices.length > 0 ? Math.max(...allChartPrices) * 1.005 : 100;
 
   const CustomCandlestickTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length > 0) {
@@ -100,16 +76,37 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
           <p className="text-xs text-muted-foreground mb-2">{data.datetime}</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
             <span className="text-muted-foreground">Open:</span>
-            <span className="font-mono text-foreground">₹{data.open?.toFixed(2)}</span>
+            <span className="font-mono text-foreground">{currencySymbol}{data.open?.toFixed(2)}</span>
             <span className="text-muted-foreground">High:</span>
-            <span className="font-mono text-gain">₹{data.high?.toFixed(2)}</span>
+            <span className="font-mono text-gain">{currencySymbol}{data.high?.toFixed(2)}</span>
             <span className="text-muted-foreground">Low:</span>
-            <span className="font-mono text-loss">₹{data.low?.toFixed(2)}</span>
+            <span className="font-mono text-loss">{currencySymbol}{data.low?.toFixed(2)}</span>
             <span className="text-muted-foreground">Close:</span>
             <span className={cn("font-mono", data.isGreen ? "text-gain" : "text-loss")}>
-              ₹{data.close?.toFixed(2)}
+              {currencySymbol}{data.close?.toFixed(2)}
             </span>
           </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const CustomLineTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length > 0) {
+      const data = payload[0].payload;
+      const isPrediction = data.predicted !== null;
+      const price = data.close || data.predicted;
+      
+      return (
+        <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+          <p className="text-xs text-muted-foreground mb-1">{data.datetime}</p>
+          <p className="font-mono text-foreground text-lg">
+            {currencySymbol}{price?.toFixed(2)}
+          </p>
+          {isPrediction && (
+            <span className="text-xs text-chartPrediction font-medium">Predicted</span>
+          )}
         </div>
       );
     }
@@ -121,7 +118,8 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
       <div className="flex items-center justify-between mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-foreground">{stock.symbol.split(':')[0]}</h2>
+            <h2 className="text-2xl font-bold text-foreground">{stock.symbol.split(':')[0].replace('.NS', '')}</h2>
+            <span className="text-sm text-muted-foreground">{stock.name}</span>
             {isMarketClosed && (
               <span className="px-2 py-1 rounded bg-loss/20 text-loss text-xs font-medium">
                 Market Closed
@@ -179,7 +177,7 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                 tickLine={false}
                 axisLine={{ stroke: 'hsl(var(--border))' }}
-                tickFormatter={(value) => `₹${value}`}
+                tickFormatter={(value) => `${currencySymbol}${value}`}
                 orientation="right"
               />
               <Tooltip content={<CustomCandlestickTooltip />} />
@@ -195,8 +193,7 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
                   const isGreen = payload.close >= payload.open;
                   const color = isGreen ? 'hsl(142, 71%, 45%)' : 'hsl(0, 84%, 60%)';
                   
-                  // Get the Y scale from the chart
-                  const yAxisHeight = 350 - 40; // Approximate chart height minus margins
+                  const yAxisHeight = 350 - 40;
                   const priceRange = maxPrice - minPrice;
                   const yScale = (price: number) => {
                     return 10 + ((maxPrice - price) / priceRange) * yAxisHeight;
@@ -237,7 +234,7 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
           </ResponsiveContainer>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={lineChartData}>
+            <ComposedChart data={lineChartData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
               <XAxis 
                 dataKey="datetime" 
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
@@ -246,25 +243,16 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
                 tickFormatter={(value) => value.slice(5, 10)}
               />
               <YAxis 
-                domain={['auto', 'auto']}
+                domain={[minPrice, maxPrice]}
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
                 tickLine={false}
                 axisLine={{ stroke: 'hsl(var(--border))' }}
-                tickFormatter={(value) => `₹${value}`}
+                tickFormatter={(value) => `${currencySymbol}${value}`}
                 orientation="right"
               />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                }}
-                labelStyle={{ color: 'hsl(var(--foreground))' }}
-                formatter={(value: number, name: string) => [
-                  `₹${value?.toFixed(2)}`,
-                  name === 'close' ? 'Price' : 'Predicted'
-                ]}
-              />
+              <Tooltip content={<CustomLineTooltip />} />
+              
+              {/* Historical price line - solid */}
               <Line
                 type="monotone"
                 dataKey="close"
@@ -273,14 +261,27 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
                 dot={false}
                 connectNulls={false}
               />
-              {!isMarketClosed && predictionLine.length > 0 && (
+              
+              {/* Connection line between actual and predicted - dotted */}
+              <Line
+                type="monotone"
+                dataKey="connectionPoint"
+                stroke="hsl(var(--chart-prediction))"
+                strokeWidth={2}
+                strokeDasharray="5 5"
+                dot={false}
+                connectNulls={true}
+              />
+              
+              {/* Predicted price line - dotted */}
+              {predictionLine.length > 0 && (
                 <Line
                   type="monotone"
                   dataKey="predicted"
                   stroke="hsl(var(--chart-prediction))"
                   strokeWidth={2}
                   strokeDasharray="5 5"
-                  dot={false}
+                  dot={{ fill: 'hsl(var(--chart-prediction))', strokeWidth: 0, r: 3 }}
                   connectNulls={false}
                 />
               )}
@@ -304,12 +305,12 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-0.5 bg-chartLine" />
+              <div className="w-6 h-0.5 bg-[hsl(var(--chart-line))]" />
               <span className="text-muted-foreground">Historical Price</span>
             </div>
-            {!isMarketClosed && predictionLine.length > 0 && (
+            {predictionLine.length > 0 && (
               <div className="flex items-center gap-2">
-                <div className="w-4 h-0.5 bg-chartPrediction" style={{ borderTop: '2px dashed' }} />
+                <div className="w-6 h-0.5 border-t-2 border-dashed border-[hsl(var(--chart-prediction))]" />
                 <span className="text-muted-foreground">Predicted Price</span>
               </div>
             )}

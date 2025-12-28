@@ -13,9 +13,8 @@ export function generateMockPrediction(
   const periodDays: Record<PredictionPeriod, number> = {
     '1d': 1,
     '5d': 5,
-    '1m': 30,
+    '15d': 15,
     '3m': 90,
-    '6m': 180,
   };
   
   const days = periodDays[period];

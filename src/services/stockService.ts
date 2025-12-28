@@ -37,7 +37,7 @@ export async function fetchStockQuote(symbol: string): Promise<Stock | null> {
       open: parseFloat(data.open) || 0,
       high: parseFloat(data.high) || 0,
       low: parseFloat(data.low) || 0,
-      currency: data.currency || 'INR',
+      currency: data.currency || 'USD',
       marketCap: data.market_cap,
       fiftyTwoWeekHigh: data.fifty_two_week?.high,
       fiftyTwoWeekLow: data.fifty_two_week?.low,
@@ -82,7 +82,7 @@ export async function fetchBatchQuotes(symbols: string[]): Promise<Stock[]> {
       open: parseFloat(item.open) || 0,
       high: parseFloat(item.high) || 0,
       low: parseFloat(item.low) || 0,
-      currency: item.currency || 'INR',
+      currency: item.currency || 'USD',
     }));
   } catch (error) {
     console.error('Error fetching batch quotes:', error);
@@ -158,8 +158,8 @@ export async function searchSymbols(query: string): Promise<Array<{symbol: strin
 
     return data.data.slice(0, 15).map((item: any) => ({
       symbol: item.symbol,
-      name: item.instrument_name,
-      type: item.instrument_type,
+      name: item.name || item.instrument_name,
+      type: item.type || item.instrument_type,
       exchange: item.exchange,
     }));
   } catch (error) {
@@ -199,17 +199,92 @@ export async function fetchNews(symbol?: string): Promise<NewsItem[]> {
   }
 }
 
-// Default Indian stocks to track
+// Top 20 US Stocks
+export const US_STOCKS = [
+  'AAPL',   // Apple
+  'MSFT',   // Microsoft
+  'GOOGL',  // Alphabet
+  'AMZN',   // Amazon
+  'META',   // Meta
+  'TSLA',   // Tesla
+  'NVDA',   // NVIDIA
+  'JPM',    // JPMorgan Chase
+  'V',      // Visa
+  'KO',     // Coca-Cola
+  'WMT',    // Walmart
+  'JNJ',    // Johnson & Johnson
+  'PG',     // Procter & Gamble
+  'UNH',    // UnitedHealth
+  'HD',     // Home Depot
+  'MA',     // Mastercard
+  'DIS',    // Disney
+  'NFLX',   // Netflix
+  'PYPL',   // PayPal
+  'INTC',   // Intel
+];
+
+// Top 20 Indian Stocks (NSE)
+export const INDIA_STOCKS = [
+  'RELIANCE',   // Reliance Industries
+  'TCS',        // Tata Consultancy Services
+  'HDFCBANK',   // HDFC Bank
+  'INFY',       // Infosys
+  'ICICIBANK',  // ICICI Bank
+  'HINDUNILVR', // Hindustan Unilever
+  'SBIN',       // State Bank of India
+  'BHARTIARTL', // Bharti Airtel
+  'ITC',        // ITC Limited
+  'KOTAKBANK',  // Kotak Mahindra Bank
+  'LT',         // Larsen & Toubro
+  'AXISBANK',   // Axis Bank
+  'WIPRO',      // Wipro
+  'ASIANPAINT', // Asian Paints
+  'MARUTI',     // Maruti Suzuki
+  'HCLTECH',    // HCL Technologies
+  'SUNPHARMA',  // Sun Pharmaceutical
+  'TITAN',      // Titan Company
+  'ULTRACEMCO', // UltraTech Cement
+  'BAJFINANCE', // Bajaj Finance
+];
+
+// Famous Companies (Additional)
+export const FAMOUS_STOCKS = [
+  'CSCO',   // Cisco
+  'PEP',    // PepsiCo
+  'ADBE',   // Adobe
+  'CRM',    // Salesforce
+  'NKE',    // Nike
+  'CMCSA',  // Comcast
+  'VZ',     // Verizon
+  'T',      // AT&T
+  'BA',     // Boeing
+  'XOM',    // Exxon Mobil
+];
+
+// Combined default stocks for initial display
 export const DEFAULT_STOCKS = [
-  'INFY',
-  'HDFCBANK', 
-  'TCS',
+  // US Stocks
+  'AAPL',
+  'MSFT', 
+  'GOOGL',
+  'TSLA',
+  'NVDA',
+  'JPM',
+  'V',
+  'KO',
+  // Indian Stocks
   'RELIANCE',
+  'TCS',
+  'HDFCBANK',
+  'INFY',
   'ICICIBANK',
-  'WIPRO',
   'SBIN',
+  'WIPRO',
   'BHARTIARTL',
 ];
+
+// All available stocks
+export const ALL_STOCKS = [...new Set([...US_STOCKS, ...INDIA_STOCKS, ...FAMOUS_STOCKS])];
 
 // Commodities with INR pricing
 export const COMMODITIES = [

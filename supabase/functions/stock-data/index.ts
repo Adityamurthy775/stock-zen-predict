@@ -7,10 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Very small in-memory cache + cooldown to avoid hitting provider usage limits.
-// (Edge instances may restart; this is best-effort.)
+// In-memory cache for quotes (30s TTL)
 const quoteCache = new Map<string, CachedQuote>();
-let stockDataDisabledUntil = 0;
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -30,16 +28,19 @@ serve(async (req) => {
     const TWELVE_DATA_URL = 'https://api.twelvedata.com';
     const FINNHUB_URL = 'https://finnhub.io/api/v1';
 
-    // Helper to format symbol for stockdata.org (add .NS for NSE stocks)
+    // Helper to format symbol for stockdata.org
     const formatSymbolForStockData = (sym: string): string => {
-      // If already has exchange suffix, return as-is
-      if (sym.includes('.')) return sym;
-      // Add .NS for NSE stocks
-      return `${sym}.NS`;
+      // Remove any existing exchange suffix for stockdata.org format
+      const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '');
+      // US stocks don't need suffix, Indian stocks need .NS
+      const isUSStock = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'KO', 
+                         'WMT', 'JNJ', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'NFLX', 'PYPL', 'INTC',
+                         'CSCO', 'PEP', 'ADBE', 'CRM', 'NKE', 'CMCSA', 'VZ', 'T', 'BA', 'XOM'].includes(baseSym);
+      return isUSStock ? baseSym : `${baseSym}.NS`;
     };
 
     if (action === 'quote') {
-      // Quote: try stockdata.org first, fall back to Twelve Data if unavailable / rate-limited.
+      // Quote: use stockdata.org as primary source
       if (!STOCKDATA_API_KEY && !TWELVE_DATA_API_KEY) {
         console.error('No market data provider keys configured');
         return new Response(
@@ -57,145 +58,91 @@ serve(async (req) => {
         });
       }
 
-      const toTwelveSymbol = (sym: string): string => {
-        if (sym.includes(':')) return sym;
-        if (sym.includes('.NS')) return sym.replace('.NS', ':NSE');
-        if (sym.includes('.BO')) return sym.replace('.BO', ':BSE');
-        // Default to NSE
-        return `${sym}:NSE`;
-      };
-
       const cacheAndReturn = (payload: unknown) => {
-        // cache for 30 seconds
         quoteCache.set(cacheKey, { expiresAt: Date.now() + 30_000, payload });
         return new Response(JSON.stringify(payload), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       };
 
-      // 1) StockData (best for live quotes) if available and not in cooldown
-      if (STOCKDATA_API_KEY && now >= stockDataDisabledUntil) {
+      // Primary: StockData.org
+      if (STOCKDATA_API_KEY) {
         const formattedSymbol = formatSymbolForStockData(symbol);
         const url = `${STOCKDATA_URL}/data/quote?symbols=${encodeURIComponent(formattedSymbol)}&api_token=${STOCKDATA_API_KEY}`;
         console.log(`Fetching quote from stockdata.org for ${formattedSymbol}`);
 
-        const response = await fetch(url);
-        const data = await response.json();
+        try {
+          const response = await fetch(url);
+          const data = await response.json();
+          console.log('StockData response:', JSON.stringify(data).substring(0, 500));
 
-        const returned = Array.isArray(data?.data) ? data.data.length : 0;
-        const stockDataOk = !data?.error && returned > 0;
+          if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+            const quote = data.data[0];
 
-        if (stockDataOk) {
-          const quote = data.data[0];
+            // Determine currency based on exchange
+            const isUSExchange = ['NYSE', 'NASDAQ', 'US'].includes(quote.exchange_short?.toUpperCase() || '');
+            const currency = isUSExchange ? 'USD' : 'INR';
 
-          const transformedQuote = {
-            symbol: quote.ticker,
-            name: quote.name || quote.ticker,
-            exchange: quote.exchange_short || 'NSE',
-            currency: quote.currency || 'INR',
-            datetime: quote.last_trade_time || new Date().toISOString(),
-            open: quote.day_open,
-            high: quote.day_high,
-            low: quote.day_low,
-            close: quote.price,
-            volume: quote.volume,
-            previous_close: quote.previous_close_price,
-            change: quote.day_change,
-            percent_change: quote.change_percent,
-            fifty_two_week: {
-              low: quote['52_week_low'],
-              high: quote['52_week_high'],
-            },
-            market_cap: quote.market_cap,
-            is_market_open: quote.is_extended_hours_price ? false : true,
-          };
+            const transformedQuote = {
+              symbol: quote.ticker,
+              name: quote.name || quote.ticker,
+              exchange: quote.exchange_short || 'NSE',
+              currency: currency,
+              datetime: quote.last_trade_time || new Date().toISOString(),
+              open: quote.day_open,
+              high: quote.day_high,
+              low: quote.day_low,
+              close: quote.price,
+              volume: quote.volume,
+              previous_close: quote.previous_close_price,
+              change: quote.day_change,
+              percent_change: quote.change_percent,
+              fifty_two_week: {
+                low: quote['52_week_low'],
+                high: quote['52_week_high'],
+              },
+              market_cap: quote.market_cap,
+              is_market_open: !quote.is_extended_hours_price,
+            };
 
-          return cacheAndReturn(transformedQuote);
+            return cacheAndReturn(transformedQuote);
+          }
+
+          // Log error and fall through to Twelve Data
+          console.error('StockData empty or error:', data?.error || 'No data');
+        } catch (err) {
+          console.error('StockData fetch error:', err);
         }
-
-        // If StockData failed, log and possibly cooldown.
-        const errCode = data?.error?.code;
-        if (errCode === 'usage_limit_reached') {
-          stockDataDisabledUntil = Date.now() + 60_000; // 1 min cooldown
-          console.error('StockData usage limit reached. Cooldown for 60s.');
-        } else {
-          console.error('StockData quote unavailable, falling back:', data?.error || data?.meta || 'unknown');
-        }
       }
 
-      // 2) Twelve Data fallback
-      if (!TWELVE_DATA_API_KEY) {
-        return cacheAndReturn({
-          error: 'Live quote provider is rate-limited; please try again later.',
-        });
-      }
+      // Fallback: Twelve Data
+      if (TWELVE_DATA_API_KEY) {
+        const toTwelveSymbol = (sym: string): string => {
+          if (sym.includes(':')) return sym;
+          const baseSym = sym.replace('.NS', '').replace('.BO', '');
+          const isUSStock = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'KO',
+                            'WMT', 'JNJ', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'NFLX', 'PYPL', 'INTC',
+                            'CSCO', 'PEP', 'ADBE', 'CRM', 'NKE', 'CMCSA', 'VZ', 'T', 'BA', 'XOM'].includes(baseSym);
+          return isUSStock ? baseSym : `${baseSym}:NSE`;
+        };
 
-      const twelveSymbol = toTwelveSymbol(symbol);
-      const url = `${TWELVE_DATA_URL}/quote?symbol=${encodeURIComponent(twelveSymbol)}&apikey=${TWELVE_DATA_API_KEY}`;
-      console.log(`Fetching fallback quote from Twelve Data for ${twelveSymbol}`);
-
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status === 'error' || data.code) {
-        console.error('Twelve Data quote error:', data.message || data.code);
-        return cacheAndReturn({ error: data.message || 'Failed to fetch quote' });
-      }
-
-      const transformedQuote = {
-        symbol: data.symbol,
-        name: data.name,
-        exchange: data.exchange,
-        currency: data.currency || 'INR',
-        datetime: data.datetime,
-        open: data.open,
-        high: data.high,
-        low: data.low,
-        close: data.close,
-        volume: data.volume,
-        previous_close: data.previous_close,
-        change: data.change,
-        percent_change: data.percent_change,
-        is_market_open: data.is_market_open,
-        fifty_two_week: data.fifty_two_week,
-      };
-
-      return cacheAndReturn(transformedQuote);
-    }
-
-    if (action === 'batch_quote') {
-      // Batch quote (best-effort). Never throw to the client.
-      const symbolList = symbols || symbol;
-
-      // Prefer Twelve Data here to avoid StockData usage-limit bursts.
-      if (!TWELVE_DATA_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: 'Batch quotes unavailable (API key missing)' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const toTwelveSymbol = (sym: string): string => {
-        if (sym.includes(':')) return sym;
-        if (sym.includes('.NS')) return sym.replace('.NS', ':NSE');
-        if (sym.includes('.BO')) return sym.replace('.BO', ':BSE');
-        return `${sym}:NSE`;
-      };
-
-      const requested = symbolList.split(',').map((s: string) => s.trim()).filter(Boolean);
-      const results: any[] = [];
-
-      for (const sym of requested) {
-        const twelveSymbol = toTwelveSymbol(sym);
+        const twelveSymbol = toTwelveSymbol(symbol);
         const url = `${TWELVE_DATA_URL}/quote?symbol=${encodeURIComponent(twelveSymbol)}&apikey=${TWELVE_DATA_API_KEY}`;
+        console.log(`Fetching fallback quote from Twelve Data for ${twelveSymbol}`);
+
         const response = await fetch(url);
         const data = await response.json();
-        if (data.status === 'error' || data.code) continue;
-        results.push({
+
+        if (data.status === 'error' || data.code) {
+          console.error('Twelve Data quote error:', data.message || data.code);
+          return cacheAndReturn({ error: data.message || 'Failed to fetch quote' });
+        }
+
+        const transformedQuote = {
           symbol: data.symbol,
           name: data.name,
           exchange: data.exchange,
-          currency: data.currency || 'INR',
+          currency: data.currency || 'USD',
           datetime: data.datetime,
           open: data.open,
           high: data.high,
@@ -207,16 +154,73 @@ serve(async (req) => {
           percent_change: data.percent_change,
           is_market_open: data.is_market_open,
           fifty_two_week: data.fifty_two_week,
-        });
+        };
+
+        return cacheAndReturn(transformedQuote);
       }
 
-      return new Response(JSON.stringify(results), {
+      return cacheAndReturn({ error: 'No quote providers available' });
+    }
+
+    if (action === 'batch_quote') {
+      // Batch quote using StockData.org
+      const symbolList = symbols || symbol;
+      
+      if (!STOCKDATA_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: 'Batch quotes unavailable (API key missing)' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const requested = symbolList.split(',').map((s: string) => s.trim()).filter(Boolean);
+      const formattedSymbols = requested.map(formatSymbolForStockData).join(',');
+      
+      const url = `${STOCKDATA_URL}/data/quote?symbols=${encodeURIComponent(formattedSymbols)}&api_token=${STOCKDATA_API_KEY}`;
+      console.log(`Fetching batch quotes from stockdata.org for ${formattedSymbols}`);
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data?.data && Array.isArray(data.data)) {
+          const results = data.data.map((quote: any) => {
+            const isUSExchange = ['NYSE', 'NASDAQ', 'US'].includes(quote.exchange_short?.toUpperCase() || '');
+            const currency = isUSExchange ? 'USD' : 'INR';
+            
+            return {
+              symbol: quote.ticker,
+              name: quote.name || quote.ticker,
+              exchange: quote.exchange_short || 'NSE',
+              currency: currency,
+              datetime: quote.last_trade_time || new Date().toISOString(),
+              open: quote.day_open,
+              high: quote.day_high,
+              low: quote.day_low,
+              close: quote.price,
+              volume: quote.volume,
+              previous_close: quote.previous_close_price,
+              change: quote.day_change,
+              percent_change: quote.change_percent,
+              is_market_open: !quote.is_extended_hours_price,
+            };
+          });
+
+          return new Response(JSON.stringify(results), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      } catch (err) {
+        console.error('Batch quote error:', err);
+      }
+
+      return new Response(JSON.stringify([]), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'time_series' || action === 'history') {
-      // Use Twelve Data for historical data.
+      // Use Twelve Data for historical data
       if (!TWELVE_DATA_API_KEY) {
         return new Response(
           JSON.stringify({ error: 'Historical data API key not configured' }),
@@ -226,7 +230,14 @@ serve(async (req) => {
 
       const size = outputsize || 100;
       const int = interval || '1day';
-      const formattedSymbol = symbol.includes('.') ? symbol.replace('.NS', ':NSE') : `${symbol}:NSE`;
+      
+      // Format symbol for Twelve Data
+      const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '');
+      const isUSStock = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'KO',
+                        'WMT', 'JNJ', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'NFLX', 'PYPL', 'INTC',
+                        'CSCO', 'PEP', 'ADBE', 'CRM', 'NKE', 'CMCSA', 'VZ', 'T', 'BA', 'XOM'].includes(baseSym);
+      const formattedSymbol = isUSStock ? baseSym : `${baseSym}:NSE`;
+      
       const url = `${TWELVE_DATA_URL}/time_series?symbol=${encodeURIComponent(formattedSymbol)}&interval=${encodeURIComponent(int)}&outputsize=${size}&apikey=${TWELVE_DATA_API_KEY}`;
       console.log(`Fetching time series for ${formattedSymbol}, interval=${int}, size=${size}`);
 
@@ -247,7 +258,7 @@ serve(async (req) => {
     }
 
     if (action === 'search') {
-      // Search: try StockData first, fall back to Twelve Data (never throw).
+      // Search using StockData.org
       if (!STOCKDATA_API_KEY && !TWELVE_DATA_API_KEY) {
         return new Response(
           JSON.stringify({ data: [], error: 'Search API key not configured' }),
@@ -255,57 +266,53 @@ serve(async (req) => {
         );
       }
 
-      if (STOCKDATA_API_KEY && Date.now() >= stockDataDisabledUntil) {
+      if (STOCKDATA_API_KEY) {
         const url = `${STOCKDATA_URL}/entity/search?search=${encodeURIComponent(symbol)}&api_token=${STOCKDATA_API_KEY}`;
         console.log(`Searching symbols (stockdata.org) for ${symbol}`);
+
+        try {
+          const response = await fetch(url);
+          const data = await response.json();
+
+          if (data?.data && !data?.error) {
+            const transformedResults = (data.data || []).slice(0, 15).map((item: any) => ({
+              symbol: item.symbol,
+              name: item.name || item.symbol,
+              type: item.type || 'Stock',
+              exchange: item.exchange?.short_name || item.exchange_short || 'Unknown',
+              country: item.country,
+            }));
+
+            return new Response(JSON.stringify({ data: transformedResults }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+        } catch (err) {
+          console.error('StockData search error:', err);
+        }
+      }
+
+      // Fallback to Twelve Data
+      if (TWELVE_DATA_API_KEY) {
+        const url = `${TWELVE_DATA_URL}/symbol_search?symbol=${encodeURIComponent(symbol)}&apikey=${TWELVE_DATA_API_KEY}`;
+        console.log(`Searching symbols (Twelve Data) for ${symbol}`);
 
         const response = await fetch(url);
         const data = await response.json();
 
-        if (!data?.error) {
-          const transformedResults = (data.data || []).slice(0, 15).map((item: any) => ({
-            symbol: item.symbol,
-            name: item.name || item.symbol,
-            type: item.type || 'Stock',
-            exchange: item.exchange?.short_name || item.exchange_short || 'Unknown',
-            country: item.country,
-          }));
+        const transformedResults = (data.data || []).slice(0, 15).map((item: any) => ({
+          symbol: item.symbol,
+          name: item.instrument_name,
+          type: item.instrument_type,
+          exchange: item.exchange,
+        }));
 
-          return new Response(JSON.stringify({ data: transformedResults }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-
-        if (data?.error?.code === 'usage_limit_reached') {
-          stockDataDisabledUntil = Date.now() + 60_000;
-          console.error('StockData usage limit reached during search. Cooldown for 60s.');
-        } else {
-          console.error('StockData search error, falling back:', data?.error);
-        }
+        return new Response(JSON.stringify({ data: transformedResults }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
-      // Twelve Data fallback
-      if (!TWELVE_DATA_API_KEY) {
-        return new Response(
-          JSON.stringify({ data: [], error: 'Search temporarily unavailable; please try again later.' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const url = `${TWELVE_DATA_URL}/symbol_search?symbol=${encodeURIComponent(symbol)}&apikey=${TWELVE_DATA_API_KEY}`;
-      console.log(`Searching symbols (Twelve Data) for ${symbol}`);
-
-      const response = await fetch(url);
-      const data = await response.json();
-
-      const transformedResults = (data.data || []).slice(0, 15).map((item: any) => ({
-        symbol: item.symbol,
-        name: item.instrument_name,
-        type: item.instrument_type,
-        exchange: item.exchange,
-      }));
-
-      return new Response(JSON.stringify({ data: transformedResults }), {
+      return new Response(JSON.stringify({ data: [] }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -317,20 +324,16 @@ serve(async (req) => {
         throw new Error('Finnhub API key not configured');
       }
 
-      // Get general market news or company news
       let url: string;
       if (symbol) {
-        // Company news - last 7 days
         const today = new Date();
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
         const fromDate = weekAgo.toISOString().split('T')[0];
         const toDate = today.toISOString().split('T')[0];
         
-        // Extract base symbol for news (remove exchange suffix)
-        const baseSymbol = symbol.split(':')[0];
+        const baseSymbol = symbol.split(':')[0].replace('.NS', '').replace('.BO', '');
         url = `${FINNHUB_URL}/company-news?symbol=${baseSymbol}&from=${fromDate}&to=${toDate}&token=${FINNHUB_API_KEY}`;
       } else {
-        // General market news
         url = `${FINNHUB_URL}/news?category=general&token=${FINNHUB_API_KEY}`;
       }
       
@@ -339,7 +342,6 @@ serve(async (req) => {
       const response = await fetch(url);
       const data = await response.json();
       
-      // Transform Finnhub news format to our format
       const transformedNews = Array.isArray(data) ? data.slice(0, 10).map((item: any, index: number) => ({
         id: `news-${item.id || index}`,
         title: item.headline || '',
@@ -360,7 +362,6 @@ serve(async (req) => {
     throw new Error('Invalid action specified');
 
   } catch (error) {
-    // Never surface provider/JSON issues as a 500 to the client — return a safe payload.
     console.error('Edge function error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),

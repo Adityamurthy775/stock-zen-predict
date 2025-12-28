@@ -14,14 +14,16 @@ interface PredictionPanelProps {
 export function PredictionPanel({ prediction, period, onPeriodChange, isMarketClosed }: PredictionPanelProps) {
   const isPositive = prediction.changePercent >= 0;
   
-  const formatPrice = (price: number) => `₹${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  const formatPrice = (price: number, currency?: string) => {
+    const currencySymbol = currency === 'USD' ? '$' : '₹';
+    return `${currencySymbol}${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  };
   
   const periodLabels: Record<PredictionPeriod, string> = {
     '1d': '1 Day',
     '5d': '5 Days',
-    '1m': '1 Month',
+    '15d': 'Half Month',
     '3m': 'Quarterly',
-    '6m': 'Half Yearly',
   };
 
   const getConfidenceLabel = (confidence: number) => {
@@ -35,7 +37,7 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-muted-foreground" />
-          <h3 className="text-lg font-semibold text-foreground">Next Day Closing Price</h3>
+          <h3 className="text-lg font-semibold text-foreground">Price Prediction</h3>
           {isMarketClosed && (
             <span className="px-2 py-1 rounded bg-loss/20 text-loss text-xs font-medium">
               Market Closed
@@ -45,15 +47,14 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
         
         <div className="flex items-center gap-3">
           <Select value={period} onValueChange={(v) => onPeriodChange(v as PredictionPeriod)}>
-            <SelectTrigger className="w-[140px] bg-secondary">
+            <SelectTrigger className="w-[160px] bg-secondary">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="1d">1 Day</SelectItem>
               <SelectItem value="5d">5 Days</SelectItem>
-              <SelectItem value="1m">1 Month</SelectItem>
-              <SelectItem value="3m">Quarterly</SelectItem>
-              <SelectItem value="6m">Half Yearly</SelectItem>
+              <SelectItem value="15d">Half Month (15 Days)</SelectItem>
+              <SelectItem value="3m">Quarterly (3 Months)</SelectItem>
             </SelectContent>
           </Select>
           
@@ -73,6 +74,7 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
       
       <p className="text-sm text-muted-foreground mb-4">
         Predicted for {new Date(prediction.targetDate).toLocaleDateString('en-IN', { weekday: 'long', month: 'short', day: 'numeric' })}
+        {' '}({periodLabels[period]} forecast)
       </p>
       
       {/* Predicted Price */}
@@ -85,7 +87,7 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
           {isPositive ? <TrendingUp className="w-6 h-6 text-gain" /> : <TrendingDown className="w-6 h-6 text-loss" />}
         </div>
         <p className={cn("text-lg font-semibold mt-2", isPositive ? "text-gain" : "text-loss")}>
-          {isPositive ? '+' : ''}{formatPrice(prediction.priceChange)} ({isPositive ? '+' : ''}{prediction.changePercent}%)
+          {isPositive ? '+' : ''}{formatPrice(prediction.priceChange)} ({isPositive ? '+' : ''}{prediction.changePercent.toFixed(2)}%)
         </p>
       </div>
       
@@ -107,7 +109,10 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
             <p className="text-xs text-muted-foreground">Lower Bound</p>
             <p className="text-lg font-mono font-semibold text-foreground">{formatPrice(prediction.lowerBound)}</p>
           </div>
-          <div className="flex-1 mx-4 h-px bg-border" />
+          <div className="flex-1 mx-4 relative">
+            <div className="h-px bg-border" />
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full" />
+          </div>
           <div className="text-right">
             <p className="text-xs text-muted-foreground">Upper Bound</p>
             <p className="text-lg font-mono font-semibold text-foreground">{formatPrice(prediction.upperBound)}</p>
