@@ -10,6 +10,26 @@ const corsHeaders = {
 // In-memory cache for quotes (30s TTL)
 const quoteCache = new Map<string, CachedQuote>();
 
+// US stocks list for currency detection
+const US_STOCKS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'KO', 
+                   'WMT', 'JNJ', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'NFLX', 'PYPL', 'INTC',
+                   'CSCO', 'PEP', 'ADBE', 'CRM', 'NKE', 'CMCSA', 'VZ', 'T', 'BA', 'XOM'];
+
+// Indian stocks list
+const INDIA_STOCKS = ['RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'HINDUNILVR', 'SBIN', 
+                      'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT', 'AXISBANK', 'WIPRO', 'ASIANPAINT', 
+                      'MARUTI', 'HCLTECH', 'SUNPHARMA', 'TITAN', 'ULTRACEMCO', 'BAJFINANCE'];
+
+const isUSStock = (sym: string): boolean => {
+  const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+  return US_STOCKS.includes(baseSym);
+};
+
+const isIndianStock = (sym: string): boolean => {
+  const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+  return INDIA_STOCKS.includes(baseSym);
+};
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -17,34 +37,31 @@ serve(async (req) => {
   }
 
   try {
-    const STOCKDATA_API_KEY = Deno.env.get('STOCKDATA_API_KEY');
-    const TWELVE_DATA_API_KEY = Deno.env.get('TWELVE_DATA_API_KEY');
+    const ALPHA_VANTAGE_API_KEY = Deno.env.get('ALPHA_VANTAGE_API_KEY');
     const FINNHUB_API_KEY = Deno.env.get('FINNHUB_API_KEY');
     
     const { action, symbol, interval, outputsize, symbols } = await req.json();
     console.log(`Stock data request: action=${action}, symbol=${symbol}, interval=${interval}`);
 
-    const STOCKDATA_URL = 'https://api.stockdata.org/v1';
-    const TWELVE_DATA_URL = 'https://api.twelvedata.com';
+    const ALPHA_VANTAGE_URL = 'https://www.alphavantage.co/query';
     const FINNHUB_URL = 'https://finnhub.io/api/v1';
 
-    // Helper to format symbol for stockdata.org
-    const formatSymbolForStockData = (sym: string): string => {
-      // Remove any existing exchange suffix for stockdata.org format
-      const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '');
-      // US stocks don't need suffix, Indian stocks need .NS
-      const isUSStock = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'KO', 
-                         'WMT', 'JNJ', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'NFLX', 'PYPL', 'INTC',
-                         'CSCO', 'PEP', 'ADBE', 'CRM', 'NKE', 'CMCSA', 'VZ', 'T', 'BA', 'XOM'].includes(baseSym);
-      return isUSStock ? baseSym : `${baseSym}.NS`;
+    // Helper to format symbol for Alpha Vantage
+    const formatSymbolForAlphaVantage = (sym: string): string => {
+      const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+      // Indian stocks need .BSE suffix for Alpha Vantage
+      if (isIndianStock(baseSym)) {
+        return `${baseSym}.BSE`;
+      }
+      return baseSym;
     };
 
     if (action === 'quote') {
-      // Quote: use stockdata.org as primary source
-      if (!STOCKDATA_API_KEY && !TWELVE_DATA_API_KEY) {
-        console.error('No market data provider keys configured');
+      // Quote: use Alpha Vantage as primary source
+      if (!ALPHA_VANTAGE_API_KEY) {
+        console.error('Alpha Vantage API key not configured');
         return new Response(
-          JSON.stringify({ error: 'Market data API key not configured' }),
+          JSON.stringify({ error: 'Alpha Vantage API key not configured' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -65,108 +82,60 @@ serve(async (req) => {
         });
       };
 
-      // Primary: StockData.org
-      if (STOCKDATA_API_KEY) {
-        const formattedSymbol = formatSymbolForStockData(symbol);
-        const url = `${STOCKDATA_URL}/data/quote?symbols=${encodeURIComponent(formattedSymbol)}&api_token=${STOCKDATA_API_KEY}`;
-        console.log(`Fetching quote from stockdata.org for ${formattedSymbol}`);
+      const formattedSymbol = formatSymbolForAlphaVantage(symbol);
+      const url = `${ALPHA_VANTAGE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(formattedSymbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+      console.log(`Fetching quote from Alpha Vantage for ${formattedSymbol}`);
 
-        try {
-          const response = await fetch(url);
-          const data = await response.json();
-          console.log('StockData response:', JSON.stringify(data).substring(0, 500));
-
-          if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
-            const quote = data.data[0];
-
-            // Determine currency based on exchange
-            const isUSExchange = ['NYSE', 'NASDAQ', 'US'].includes(quote.exchange_short?.toUpperCase() || '');
-            const currency = isUSExchange ? 'USD' : 'INR';
-
-            const transformedQuote = {
-              symbol: quote.ticker,
-              name: quote.name || quote.ticker,
-              exchange: quote.exchange_short || 'NSE',
-              currency: currency,
-              datetime: quote.last_trade_time || new Date().toISOString(),
-              open: quote.day_open,
-              high: quote.day_high,
-              low: quote.day_low,
-              close: quote.price,
-              volume: quote.volume,
-              previous_close: quote.previous_close_price,
-              change: quote.day_change,
-              percent_change: quote.change_percent,
-              fifty_two_week: {
-                low: quote['52_week_low'],
-                high: quote['52_week_high'],
-              },
-              market_cap: quote.market_cap,
-              is_market_open: !quote.is_extended_hours_price,
-            };
-
-            return cacheAndReturn(transformedQuote);
-          }
-
-          // Log error and fall through to Twelve Data
-          console.error('StockData empty or error:', data?.error || 'No data');
-        } catch (err) {
-          console.error('StockData fetch error:', err);
-        }
-      }
-
-      // Fallback: Twelve Data
-      if (TWELVE_DATA_API_KEY) {
-        const toTwelveSymbol = (sym: string): string => {
-          if (sym.includes(':')) return sym;
-          const baseSym = sym.replace('.NS', '').replace('.BO', '');
-          const isUSStock = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'KO',
-                            'WMT', 'JNJ', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'NFLX', 'PYPL', 'INTC',
-                            'CSCO', 'PEP', 'ADBE', 'CRM', 'NKE', 'CMCSA', 'VZ', 'T', 'BA', 'XOM'].includes(baseSym);
-          return isUSStock ? baseSym : `${baseSym}:NSE`;
-        };
-
-        const twelveSymbol = toTwelveSymbol(symbol);
-        const url = `${TWELVE_DATA_URL}/quote?symbol=${encodeURIComponent(twelveSymbol)}&apikey=${TWELVE_DATA_API_KEY}`;
-        console.log(`Fetching fallback quote from Twelve Data for ${twelveSymbol}`);
-
+      try {
         const response = await fetch(url);
         const data = await response.json();
+        console.log('Alpha Vantage response:', JSON.stringify(data).substring(0, 500));
 
-        if (data.status === 'error' || data.code) {
-          console.error('Twelve Data quote error:', data.message || data.code);
-          return cacheAndReturn({ error: data.message || 'Failed to fetch quote' });
+        if (data['Global Quote'] && Object.keys(data['Global Quote']).length > 0) {
+          const quote = data['Global Quote'];
+          
+          // Determine currency based on stock type
+          const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+          const currency = isIndianStock(baseSym) ? 'INR' : 'USD';
+
+          const price = parseFloat(quote['05. price']) || 0;
+          const previousClose = parseFloat(quote['08. previous close']) || 0;
+          const change = parseFloat(quote['09. change']) || 0;
+          const changePercent = parseFloat(quote['10. change percent']?.replace('%', '')) || 0;
+
+          const transformedQuote = {
+            symbol: quote['01. symbol']?.replace('.BSE', '') || symbol,
+            name: quote['01. symbol']?.replace('.BSE', '') || symbol,
+            exchange: isIndianStock(baseSym) ? 'BSE' : 'NYSE',
+            currency: currency,
+            datetime: quote['07. latest trading day'] || new Date().toISOString(),
+            open: parseFloat(quote['02. open']) || 0,
+            high: parseFloat(quote['03. high']) || 0,
+            low: parseFloat(quote['04. low']) || 0,
+            close: price,
+            volume: parseInt(quote['06. volume']) || 0,
+            previous_close: previousClose,
+            change: change,
+            percent_change: changePercent,
+            is_market_open: true,
+          };
+
+          return cacheAndReturn(transformedQuote);
         }
 
-        const transformedQuote = {
-          symbol: data.symbol,
-          name: data.name,
-          exchange: data.exchange,
-          currency: data.currency || 'USD',
-          datetime: data.datetime,
-          open: data.open,
-          high: data.high,
-          low: data.low,
-          close: data.close,
-          volume: data.volume,
-          previous_close: data.previous_close,
-          change: data.change,
-          percent_change: data.percent_change,
-          is_market_open: data.is_market_open,
-          fifty_two_week: data.fifty_two_week,
-        };
-
-        return cacheAndReturn(transformedQuote);
+        console.error('Alpha Vantage empty or error:', data['Note'] || data['Error Message'] || 'No data');
+        return cacheAndReturn({ error: data['Note'] || data['Error Message'] || 'Failed to fetch quote' });
+      } catch (err) {
+        console.error('Alpha Vantage fetch error:', err);
+        return cacheAndReturn({ error: 'Failed to fetch quote' });
       }
-
-      return cacheAndReturn({ error: 'No quote providers available' });
     }
 
     if (action === 'batch_quote') {
-      // Batch quote using StockData.org
+      // Batch quote using Alpha Vantage (fetch one by one due to API limits)
       const symbolList = symbols || symbol;
       
-      if (!STOCKDATA_API_KEY) {
+      if (!ALPHA_VANTAGE_API_KEY) {
         return new Response(
           JSON.stringify({ error: 'Batch quotes unavailable (API key missing)' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -174,54 +143,57 @@ serve(async (req) => {
       }
 
       const requested = symbolList.split(',').map((s: string) => s.trim()).filter(Boolean);
-      const formattedSymbols = requested.map(formatSymbolForStockData).join(',');
+      console.log(`Fetching batch quotes from Alpha Vantage for ${requested.length} symbols`);
+
+      const results: any[] = [];
       
-      const url = `${STOCKDATA_URL}/data/quote?symbols=${encodeURIComponent(formattedSymbols)}&api_token=${STOCKDATA_API_KEY}`;
-      console.log(`Fetching batch quotes from stockdata.org for ${formattedSymbols}`);
+      // Fetch quotes sequentially to avoid rate limits (Alpha Vantage has 5 calls/min on free tier)
+      for (const sym of requested.slice(0, 5)) { // Limit to 5 to avoid rate limits
+        const formattedSymbol = formatSymbolForAlphaVantage(sym);
+        const url = `${ALPHA_VANTAGE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(formattedSymbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+        
+        try {
+          const response = await fetch(url);
+          const data = await response.json();
 
-      try {
-        const response = await fetch(url);
-        const data = await response.json();
+          if (data['Global Quote'] && Object.keys(data['Global Quote']).length > 0) {
+            const quote = data['Global Quote'];
+            const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+            const currency = isIndianStock(baseSym) ? 'INR' : 'USD';
 
-        if (data?.data && Array.isArray(data.data)) {
-          const results = data.data.map((quote: any) => {
-            const isUSExchange = ['NYSE', 'NASDAQ', 'US'].includes(quote.exchange_short?.toUpperCase() || '');
-            const currency = isUSExchange ? 'USD' : 'INR';
-            
-            return {
-              symbol: quote.ticker,
-              name: quote.name || quote.ticker,
-              exchange: quote.exchange_short || 'NSE',
+            results.push({
+              symbol: baseSym,
+              name: baseSym,
+              exchange: isIndianStock(baseSym) ? 'BSE' : 'NYSE',
               currency: currency,
-              datetime: quote.last_trade_time || new Date().toISOString(),
-              open: quote.day_open,
-              high: quote.day_high,
-              low: quote.day_low,
-              close: quote.price,
-              volume: quote.volume,
-              previous_close: quote.previous_close_price,
-              change: quote.day_change,
-              percent_change: quote.change_percent,
-              is_market_open: !quote.is_extended_hours_price,
-            };
-          });
-
-          return new Response(JSON.stringify(results), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+              datetime: quote['07. latest trading day'] || new Date().toISOString(),
+              open: parseFloat(quote['02. open']) || 0,
+              high: parseFloat(quote['03. high']) || 0,
+              low: parseFloat(quote['04. low']) || 0,
+              close: parseFloat(quote['05. price']) || 0,
+              volume: parseInt(quote['06. volume']) || 0,
+              previous_close: parseFloat(quote['08. previous close']) || 0,
+              change: parseFloat(quote['09. change']) || 0,
+              percent_change: parseFloat(quote['10. change percent']?.replace('%', '')) || 0,
+              is_market_open: true,
+            });
+          }
+          
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 200));
+        } catch (err) {
+          console.error(`Error fetching quote for ${sym}:`, err);
         }
-      } catch (err) {
-        console.error('Batch quote error:', err);
       }
 
-      return new Response(JSON.stringify([]), {
+      return new Response(JSON.stringify(results), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
     if (action === 'time_series' || action === 'history') {
-      // Use Twelve Data for historical data
-      if (!TWELVE_DATA_API_KEY) {
+      // Use Alpha Vantage for historical data
+      if (!ALPHA_VANTAGE_API_KEY) {
         return new Response(
           JSON.stringify({ error: 'Historical data API key not configured' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -231,85 +203,92 @@ serve(async (req) => {
       const size = outputsize || 100;
       const int = interval || '1day';
       
-      // Format symbol for Twelve Data
-      const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '');
-      const isUSStock = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'KO',
-                        'WMT', 'JNJ', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'NFLX', 'PYPL', 'INTC',
-                        'CSCO', 'PEP', 'ADBE', 'CRM', 'NKE', 'CMCSA', 'VZ', 'T', 'BA', 'XOM'].includes(baseSym);
-      const formattedSymbol = isUSStock ? baseSym : `${baseSym}:NSE`;
+      const formattedSymbol = formatSymbolForAlphaVantage(symbol);
       
-      const url = `${TWELVE_DATA_URL}/time_series?symbol=${encodeURIComponent(formattedSymbol)}&interval=${encodeURIComponent(int)}&outputsize=${size}&apikey=${TWELVE_DATA_API_KEY}`;
-      console.log(`Fetching time series for ${formattedSymbol}, interval=${int}, size=${size}`);
+      // Determine function based on interval
+      let func = 'TIME_SERIES_DAILY';
+      if (int.includes('min') || int === '1h' || int === '4h') {
+        func = 'TIME_SERIES_INTRADAY';
+      } else if (int === '1week') {
+        func = 'TIME_SERIES_WEEKLY';
+      } else if (int === '1month') {
+        func = 'TIME_SERIES_MONTHLY';
+      }
+      
+      let url = `${ALPHA_VANTAGE_URL}?function=${func}&symbol=${encodeURIComponent(formattedSymbol)}&apikey=${ALPHA_VANTAGE_API_KEY}&outputsize=compact`;
+      if (func === 'TIME_SERIES_INTRADAY') {
+        url += `&interval=5min`;
+      }
+      
+      console.log(`Fetching time series from Alpha Vantage for ${formattedSymbol}`);
 
-      const response = await fetch(url);
-      const data = await response.json();
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
 
-      if (data.status === 'error' || data.code) {
-        console.error('Time series API error:', data.message || data.code);
+        // Find the time series key in the response
+        const timeSeriesKey = Object.keys(data).find(key => key.includes('Time Series'));
+        
+        if (timeSeriesKey && data[timeSeriesKey]) {
+          const timeSeries = data[timeSeriesKey];
+          const values = Object.entries(timeSeries).slice(0, size).map(([datetime, values]: [string, any]) => ({
+            datetime,
+            open: values['1. open'],
+            high: values['2. high'],
+            low: values['3. low'],
+            close: values['4. close'],
+            volume: values['5. volume'] || values['6. volume'] || '0',
+          }));
+
+          return new Response(JSON.stringify({ values }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+
+        console.error('Alpha Vantage time series error:', data['Note'] || data['Error Message'] || 'No data');
         return new Response(
-          JSON.stringify({ error: data.message || 'Failed to fetch time series' }),
+          JSON.stringify({ error: data['Note'] || data['Error Message'] || 'Failed to fetch time series' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (err) {
+        console.error('Alpha Vantage time series error:', err);
+        return new Response(
+          JSON.stringify({ error: 'Failed to fetch time series' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
-      return new Response(JSON.stringify(data), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
     }
 
     if (action === 'search') {
-      // Search using StockData.org
-      if (!STOCKDATA_API_KEY && !TWELVE_DATA_API_KEY) {
+      // Search using Alpha Vantage
+      if (!ALPHA_VANTAGE_API_KEY) {
         return new Response(
           JSON.stringify({ data: [], error: 'Search API key not configured' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      if (STOCKDATA_API_KEY) {
-        const url = `${STOCKDATA_URL}/entity/search?search=${encodeURIComponent(symbol)}&api_token=${STOCKDATA_API_KEY}`;
-        console.log(`Searching symbols (stockdata.org) for ${symbol}`);
+      const url = `${ALPHA_VANTAGE_URL}?function=SYMBOL_SEARCH&keywords=${encodeURIComponent(symbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+      console.log(`Searching symbols (Alpha Vantage) for ${symbol}`);
 
-        try {
-          const response = await fetch(url);
-          const data = await response.json();
-
-          if (data?.data && !data?.error) {
-            const transformedResults = (data.data || []).slice(0, 15).map((item: any) => ({
-              symbol: item.symbol,
-              name: item.name || item.symbol,
-              type: item.type || 'Stock',
-              exchange: item.exchange?.short_name || item.exchange_short || 'Unknown',
-              country: item.country,
-            }));
-
-            return new Response(JSON.stringify({ data: transformedResults }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-        } catch (err) {
-          console.error('StockData search error:', err);
-        }
-      }
-
-      // Fallback to Twelve Data
-      if (TWELVE_DATA_API_KEY) {
-        const url = `${TWELVE_DATA_URL}/symbol_search?symbol=${encodeURIComponent(symbol)}&apikey=${TWELVE_DATA_API_KEY}`;
-        console.log(`Searching symbols (Twelve Data) for ${symbol}`);
-
+      try {
         const response = await fetch(url);
         const data = await response.json();
 
-        const transformedResults = (data.data || []).slice(0, 15).map((item: any) => ({
-          symbol: item.symbol,
-          name: item.instrument_name,
-          type: item.instrument_type,
-          exchange: item.exchange,
-        }));
+        if (data.bestMatches && Array.isArray(data.bestMatches)) {
+          const transformedResults = data.bestMatches.slice(0, 15).map((item: any) => ({
+            symbol: item['1. symbol'],
+            name: item['2. name'],
+            type: item['3. type'],
+            exchange: item['4. region'],
+          }));
 
-        return new Response(JSON.stringify({ data: transformedResults }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+          return new Response(JSON.stringify({ data: transformedResults }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+      } catch (err) {
+        console.error('Alpha Vantage search error:', err);
       }
 
       return new Response(JSON.stringify({ data: [] }), {
