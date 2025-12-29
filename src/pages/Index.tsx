@@ -98,9 +98,6 @@ const Index = () => {
                 {/* Tabs */}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="w-full justify-start bg-card border border-border">
-                    <TabsTrigger value="chart">Chart</TabsTrigger>
-                    <TabsTrigger value="history">History</TabsTrigger>
-                    <TabsTrigger value="prediction">Prediction</TabsTrigger>
                     <TabsTrigger value="portfolio" className="gap-2">
                       <Wallet className="w-4 h-4" />
                       Portfolio
@@ -109,8 +106,30 @@ const Index = () => {
                       <Bell className="w-4 h-4" />
                       Alerts
                     </TabsTrigger>
+                    <TabsTrigger value="chart">Chart</TabsTrigger>
+                    <TabsTrigger value="history">History</TabsTrigger>
+                    <TabsTrigger value="prediction">Prediction</TabsTrigger>
                     <TabsTrigger value="models">Models</TabsTrigger>
                   </TabsList>
+
+                  <TabsContent value="portfolio" className="mt-6">
+                    <Portfolio
+                      stocks={stocks}
+                      portfolio={portfolio}
+                      onAddToPortfolio={addToPortfolio}
+                      onRemoveFromPortfolio={removeFromPortfolio}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="alerts" className="mt-6">
+                    <Alerts
+                      stocks={stocks}
+                      alerts={alerts}
+                      onAddAlert={addAlert}
+                      onRemoveAlert={removeAlert}
+                      onToggleAlert={toggleAlert}
+                    />
+                  </TabsContent>
 
                   <TabsContent value="chart" className="mt-6 space-y-6">
                     <StockChart
@@ -141,25 +160,6 @@ const Index = () => {
                       period={predictionPeriod}
                       onPeriodChange={changePredictionPeriod}
                       isMarketClosed={!marketStatus.isOpen}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="portfolio" className="mt-6">
-                    <Portfolio
-                      stocks={stocks}
-                      portfolio={portfolio}
-                      onAddToPortfolio={addToPortfolio}
-                      onRemoveFromPortfolio={removeFromPortfolio}
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="alerts" className="mt-6">
-                    <Alerts
-                      stocks={stocks}
-                      alerts={alerts}
-                      onAddAlert={addAlert}
-                      onRemoveAlert={removeAlert}
-                      onToggleAlert={toggleAlert}
                     />
                   </TabsContent>
 
