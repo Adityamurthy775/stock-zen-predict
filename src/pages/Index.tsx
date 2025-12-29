@@ -98,6 +98,7 @@ const Index = () => {
                 {/* Tabs */}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="w-full justify-start bg-card border border-border">
+                    <TabsTrigger value="chart">Dashboard</TabsTrigger>
                     <TabsTrigger value="portfolio" className="gap-2">
                       <Wallet className="w-4 h-4" />
                       Portfolio
@@ -106,7 +107,6 @@ const Index = () => {
                       <Bell className="w-4 h-4" />
                       Alerts
                     </TabsTrigger>
-                    <TabsTrigger value="chart">Chart</TabsTrigger>
                     <TabsTrigger value="history">History</TabsTrigger>
                     <TabsTrigger value="prediction">Prediction</TabsTrigger>
                     <TabsTrigger value="models">Models</TabsTrigger>
