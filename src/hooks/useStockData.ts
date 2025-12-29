@@ -221,11 +221,11 @@ export function useStockData() {
     fetchSelectedStockData();
   }, [fetchSelectedStockData]);
 
-  // Refresh data periodically (every 60 seconds)
+  // Refresh data periodically (every 40 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchAllStocks();
-    }, 60000);
+    }, 40000);
     
     return () => clearInterval(interval);
   }, [fetchAllStocks]);

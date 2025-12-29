@@ -1,6 +1,8 @@
-import { format } from 'date-fns';
+import { useState } from 'react';
+import { format, subMonths } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import type { TimeSeriesPoint } from '@/types/stock';
 
@@ -9,13 +11,13 @@ interface StockHistoryProps {
   currency?: string;
 }
 
-export function StockHistory({ timeSeries, currency = 'INR' }: StockHistoryProps) {
+type HistoryPeriod = '1m' | '2m' | 'all';
+
+export function StockHistory({ timeSeries, currency = 'USD' }: StockHistoryProps) {
+  const [period, setPeriod] = useState<HistoryPeriod>('1m');
+
   const formatPrice = (value: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-    }).format(value);
+    return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatVolume = (volume: number) => {
@@ -31,14 +33,46 @@ export function StockHistory({ timeSeries, currency = 'INR' }: StockHistoryProps
     return format(new Date(datetime), 'MMM dd');
   };
 
-  // Reverse to show latest first
-  const sortedData = [...timeSeries].reverse();
+  // Filter data based on selected period
+  const getFilteredData = () => {
+    const now = new Date();
+    let cutoffDate: Date;
+    
+    switch (period) {
+      case '1m':
+        cutoffDate = subMonths(now, 1);
+        break;
+      case '2m':
+        cutoffDate = subMonths(now, 2);
+        break;
+      default:
+        return [...timeSeries].reverse();
+    }
+    
+    return [...timeSeries]
+      .filter(point => new Date(point.datetime) >= cutoffDate)
+      .reverse();
+  };
+
+  const sortedData = getFilteredData();
 
   return (
     <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="p-4 border-b border-border">
-        <h3 className="text-lg font-semibold text-foreground">Price History</h3>
-        <p className="text-sm text-muted-foreground">Historical OHLC data</p>
+      <div className="p-4 border-b border-border flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-foreground">Price History</h3>
+          <p className="text-sm text-muted-foreground">Historical OHLC data</p>
+        </div>
+        <Select value={period} onValueChange={(value: HistoryPeriod) => setPeriod(value)}>
+          <SelectTrigger className="w-[140px] bg-background">
+            <SelectValue placeholder="Select period" />
+          </SelectTrigger>
+          <SelectContent className="bg-background border-border">
+            <SelectItem value="1m">1 Month</SelectItem>
+            <SelectItem value="2m">2 Months</SelectItem>
+            <SelectItem value="all">All Time</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       
       <div className="max-h-[500px] overflow-y-auto">

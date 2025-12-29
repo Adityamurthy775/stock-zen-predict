@@ -16,7 +16,7 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
   const [chartType, setChartType] = useState<'line' | 'candlestick'>('candlestick');
   
   const isPositive = stock.changePercent >= 0;
-  const currencySymbol = stock.currency === 'USD' ? '$' : '₹';
+  const currencySymbol = '$';
   
   // Prepare candlestick data with OHLC
   const candlestickData = timeSeries.map(point => ({
