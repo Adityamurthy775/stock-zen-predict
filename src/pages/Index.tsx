@@ -12,7 +12,7 @@ import { MarketStatusIndicator } from '@/components/MarketStatusIndicator';
 import { Portfolio } from '@/components/Portfolio';
 import { Alerts } from '@/components/Alerts';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, Wallet, Bell } from 'lucide-react';
+import { TrendingUp, Wallet, Bell, LayoutDashboard } from 'lucide-react';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('chart');
@@ -98,7 +98,10 @@ const Index = () => {
                 {/* Tabs */}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="w-full justify-start bg-card border border-border">
-                    <TabsTrigger value="chart">Dashboard</TabsTrigger>
+                    <TabsTrigger value="chart" className="gap-2">
+                      <LayoutDashboard className="w-4 h-4" />
+                      Dashboard
+                    </TabsTrigger>
                     <TabsTrigger value="portfolio" className="gap-2">
                       <Wallet className="w-4 h-4" />
                       Portfolio
