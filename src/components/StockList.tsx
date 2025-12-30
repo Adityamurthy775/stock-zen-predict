@@ -93,20 +93,30 @@ export function StockList({
           {/* Search Results Dropdown */}
           {searchResults.length > 0 && (
             <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-card overflow-hidden max-h-[300px] overflow-y-auto">
-              {searchResults.map((result) => (
-                <button
-                  key={`${result.symbol}-${result.exchange}`}
-                  onClick={() => handleAddStock(result.symbol)}
-                  className="w-full px-4 py-3 text-left hover:bg-secondary transition-colors flex items-center justify-between"
-                >
-                  <div>
-                    <span className="font-semibold text-foreground">{result.symbol}</span>
-                    <span className="text-xs text-muted-foreground ml-2">({result.exchange})</span>
-                    <p className="text-sm text-muted-foreground truncate max-w-[200px]">{result.name}</p>
-                  </div>
-                  <Plus className="w-4 h-4 text-gain flex-shrink-0" />
-                </button>
-              ))}
+              {searchResults.map((result) => {
+                const isIndian = isIndianStock(result.symbol) || 
+                  result.exchange?.includes('NSE') || 
+                  result.exchange?.includes('BSE') ||
+                  result.exchange?.includes('National Stock Exchange') ||
+                  result.exchange?.includes('Bombay');
+                const currencyLabel = isIndian ? '₹ INR' : '$ USD';
+                
+                return (
+                  <button
+                    key={`${result.symbol}-${result.exchange}`}
+                    onClick={() => handleAddStock(result.symbol)}
+                    className="w-full px-4 py-3 text-left hover:bg-secondary transition-colors flex items-center justify-between"
+                  >
+                    <div>
+                      <span className="font-semibold text-foreground">{result.symbol}</span>
+                      <span className="text-xs text-muted-foreground ml-2">({result.exchange})</span>
+                      <span className="text-xs text-primary ml-2 font-medium">{currencyLabel}</span>
+                      <p className="text-sm text-muted-foreground truncate max-w-[200px]">{result.name}</p>
+                    </div>
+                    <Plus className="w-4 h-4 text-gain flex-shrink-0" />
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
