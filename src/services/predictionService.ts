@@ -6,9 +6,9 @@ export function generateMockPrediction(
   currentPrice: number,
   period: PredictionPeriod
 ): Prediction {
-  // Simulate prediction logic based on period
-  const volatility = 0.02 + Math.random() * 0.03; // 2-5% volatility
-  const trend = Math.random() > 0.5 ? 1 : -1;
+  // Use a seeded approach based on symbol for consistent predictions
+  const symbolHash = symbol.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const seedValue = (symbolHash % 100) / 100; // 0 to 1 based on symbol
   
   const periodDays: Record<PredictionPeriod, number> = {
     '1d': 1,
@@ -18,12 +18,27 @@ export function generateMockPrediction(
   };
   
   const days = periodDays[period];
-  const changeMultiplier = Math.sqrt(days) * volatility * trend;
-  const predictedChange = currentPrice * changeMultiplier;
+  
+  // More realistic volatility: 0.5-2% for short term, scales with time
+  const baseVolatility = 0.005 + (seedValue * 0.015); // 0.5% to 2%
+  const timeScaledVolatility = baseVolatility * Math.sqrt(days / 252); // Annualized scaling
+  
+  // Trend based on symbol characteristics (consistent direction)
+  const trend = seedValue > 0.5 ? 1 : -1;
+  const trendStrength = 0.3 + (seedValue * 0.4); // 30% to 70% of volatility goes to trend
+  
+  // Calculate price change with realistic bounds
+  const trendComponent = currentPrice * timeScaledVolatility * trend * trendStrength;
+  const predictedChange = trendComponent;
   const predictedPrice = currentPrice + predictedChange;
   
-  const confidence = Math.max(50, Math.min(95, 85 - days * 0.3 + Math.random() * 10));
-  const uncertainty = (100 - confidence) / 100 * currentPrice * 0.05;
+  // Higher confidence for shorter periods
+  const baseConfidence = 92 - (days * 0.15); // Starts at ~92% for 1 day
+  const confidence = Math.max(65, Math.min(95, baseConfidence));
+  
+  // Uncertainty grows with time horizon
+  const uncertaintyPercent = (100 - confidence) / 100;
+  const uncertainty = currentPrice * uncertaintyPercent * 0.03 * Math.sqrt(days);
   
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() + days);
