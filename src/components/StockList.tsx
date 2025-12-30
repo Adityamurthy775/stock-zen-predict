@@ -59,8 +59,13 @@ export function StockList({
     return volume.toString();
   };
 
-  const formatPrice = (price: number) => {
-    return `$${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const isIndianStock = (symbol: string) => {
+    return symbol.includes('.NS') || symbol.includes('.BSE') || symbol.includes('.BO') || symbol.includes('NSE:') || symbol.includes('BSE:');
+  };
+
+  const formatPrice = (price: number, symbol: string) => {
+    const currencySymbol = isIndianStock(symbol) ? '₹' : '$';
+    return `${currencySymbol}${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatSymbol = (symbol: string) => {
@@ -151,7 +156,7 @@ export function StockList({
                       </div>
                       <p className="text-sm text-muted-foreground mt-0.5 truncate max-w-[180px]">{stock.name}</p>
                       <p className="text-lg font-semibold text-foreground mt-1 font-mono tabular-nums">
-                        {formatPrice(stock.price)}
+                        {formatPrice(stock.price, stock.symbol)}
                       </p>
                     </div>
                     

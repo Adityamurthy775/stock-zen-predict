@@ -9,13 +9,18 @@ interface PredictionPanelProps {
   period: PredictionPeriod;
   onPeriodChange: (period: PredictionPeriod) => void;
   isMarketClosed?: boolean;
+  stockSymbol?: string;
 }
 
-export function PredictionPanel({ prediction, period, onPeriodChange, isMarketClosed }: PredictionPanelProps) {
+const isIndianStock = (symbol: string) => {
+  return symbol.includes('.NS') || symbol.includes('.BSE') || symbol.includes('.BO') || symbol.includes('NSE:') || symbol.includes('BSE:');
+};
+
+export function PredictionPanel({ prediction, period, onPeriodChange, isMarketClosed, stockSymbol = '' }: PredictionPanelProps) {
   const isPositive = prediction.changePercent >= 0;
+  const currencySymbol = isIndianStock(stockSymbol) ? '₹' : '$';
   
-  const formatPrice = (price: number, currency?: string) => {
-    const currencySymbol = currency === 'USD' ? '$' : '₹';
+  const formatPrice = (price: number) => {
     return `${currencySymbol}${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
   };
   

@@ -12,11 +12,15 @@ interface StockChartProps {
   isMarketClosed?: boolean;
 }
 
+const isIndianStock = (symbol: string) => {
+  return symbol.includes('.NS') || symbol.includes('.BSE') || symbol.includes('.BO') || symbol.includes('NSE:') || symbol.includes('BSE:');
+};
+
 export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }: StockChartProps) {
   const [chartType, setChartType] = useState<'line' | 'candlestick'>('candlestick');
   
   const isPositive = stock.changePercent >= 0;
-  const currencySymbol = '$';
+  const currencySymbol = isIndianStock(stock.symbol) ? '₹' : '$';
   
   // Prepare candlestick data with OHLC
   const candlestickData = timeSeries.map(point => ({
