@@ -9,15 +9,22 @@ import type { TimeSeriesPoint } from '@/types/stock';
 interface StockHistoryProps {
   timeSeries: TimeSeriesPoint[];
   currency?: string;
+  stockSymbol?: string;
 }
 
 type HistoryPeriod = '1m' | '2m' | 'all';
 
-export function StockHistory({ timeSeries, currency = 'USD' }: StockHistoryProps) {
+const isIndianStock = (symbol: string) => {
+  return symbol.includes('.NS') || symbol.includes('.BSE') || symbol.includes('.BO') || symbol.includes('NSE:') || symbol.includes('BSE:');
+};
+
+export function StockHistory({ timeSeries, currency = 'USD', stockSymbol = '' }: StockHistoryProps) {
   const [period, setPeriod] = useState<HistoryPeriod>('1m');
+  
+  const currencySymbol = isIndianStock(stockSymbol) ? '₹' : '$';
 
   const formatPrice = (value: number) => {
-    return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currencySymbol}${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatVolume = (volume: number) => {

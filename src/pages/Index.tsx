@@ -146,6 +146,7 @@ const Index = () => {
                       period={predictionPeriod}
                       onPeriodChange={changePredictionPeriod}
                       isMarketClosed={!marketStatus.isOpen}
+                      stockSymbol={selectedStock.symbol}
                     />
                     <NewsSection news={news} />
                   </TabsContent>
@@ -154,6 +155,7 @@ const Index = () => {
                     <StockHistory 
                       timeSeries={timeSeries} 
                       currency={selectedStock.currency}
+                      stockSymbol={selectedStock.symbol}
                     />
                   </TabsContent>
 
@@ -163,6 +165,7 @@ const Index = () => {
                       period={predictionPeriod}
                       onPeriodChange={changePredictionPeriod}
                       isMarketClosed={!marketStatus.isOpen}
+                      stockSymbol={selectedStock.symbol}
                     />
                   </TabsContent>
 
