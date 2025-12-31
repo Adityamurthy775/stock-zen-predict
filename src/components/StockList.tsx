@@ -59,8 +59,19 @@ export function StockList({
     return volume.toString();
   };
 
+  // List of known Indian stock symbols (without exchange suffix)
+  const INDIAN_STOCK_SYMBOLS = [
+    'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'HINDUNILVR', 'SBIN',
+    'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT', 'AXISBANK', 'WIPRO', 'ASIANPAINT',
+    'MARUTI', 'HCLTECH', 'SUNPHARMA', 'TITAN', 'ULTRACEMCO', 'BAJFINANCE'
+  ];
+
   const isIndianStock = (symbol: string) => {
-    return symbol.includes('.NS') || symbol.includes('.BSE') || symbol.includes('.BO') || symbol.includes('NSE:') || symbol.includes('BSE:');
+    const upperSymbol = symbol.toUpperCase();
+    return symbol.includes('.NS') || symbol.includes('.BSE') || symbol.includes('.BO') || 
+           symbol.includes('NSE:') || symbol.includes('BSE:') ||
+           INDIAN_STOCK_SYMBOLS.includes(upperSymbol) ||
+           INDIAN_STOCK_SYMBOLS.some(s => upperSymbol.includes(s));
   };
 
   const formatPrice = (price: number, symbol: string) => {
