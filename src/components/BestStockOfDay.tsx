@@ -1,4 +1,4 @@
-import { Trophy, TrendingUp, Star } from 'lucide-react';
+import { Trophy, TrendingUp, TrendingDown, Star, Medal } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import type { Stock } from '@/types/stock';
 import { cn } from '@/lib/utils';
@@ -22,18 +22,25 @@ const isIndianStock = (symbol: string) => {
          INDIAN_STOCK_SYMBOLS.some(s => upperSymbol.includes(s));
 };
 
+const RANK_STYLES = [
+  { bg: 'bg-yellow-500/20', border: 'border-yellow-500/30', icon: 'text-yellow-500', label: '🥇 1st' },
+  { bg: 'bg-gray-300/20', border: 'border-gray-400/30', icon: 'text-gray-400', label: '🥈 2nd' },
+  { bg: 'bg-orange-400/20', border: 'border-orange-400/30', icon: 'text-orange-400', label: '🥉 3rd' },
+  { bg: 'bg-primary/10', border: 'border-primary/20', icon: 'text-primary', label: '4th' },
+  { bg: 'bg-muted/50', border: 'border-border', icon: 'text-muted-foreground', label: '5th' },
+];
+
 export function BestStockOfDay({ stocks }: BestStockOfDayProps) {
   if (stocks.length === 0) return null;
 
-  // Find the best performing stock
-  const bestStock = stocks.reduce((best, current) => 
-    current.changePercent > best.changePercent ? current : best
-  , stocks[0]);
+  // Sort stocks by changePercent and get top 5
+  const topStocks = [...stocks]
+    .sort((a, b) => b.changePercent - a.changePercent)
+    .slice(0, 5);
 
-  const currencySymbol = isIndianStock(bestStock.symbol) ? '₹' : '$';
-
-  const formatPrice = (price: number) => {
-    return `${currencySymbol}${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+  const formatPrice = (stock: Stock) => {
+    const currencySymbol = isIndianStock(stock.symbol) ? '₹' : '$';
+    return `${currencySymbol}${stock.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
   };
 
   return (
@@ -44,53 +51,88 @@ export function BestStockOfDay({ stocks }: BestStockOfDayProps) {
         </div>
         <div>
           <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
-            Best Stock of the Day
+            Best Stocks of the Day
             <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
           </h3>
-          <p className="text-xs text-muted-foreground">Top performer based on daily change</p>
+          <p className="text-xs text-muted-foreground">Top 5 performers based on daily change</p>
         </div>
       </div>
 
-      <Card className="bg-card/50 border-primary/10">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-bold text-foreground">{bestStock.symbol}</span>
-                <span className="px-2 py-0.5 bg-gain/20 text-gain text-xs font-semibold rounded-full flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  TOP PICK
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground">{bestStock.name}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-2xl font-bold font-mono text-foreground">{formatPrice(bestStock.price)}</p>
-              <p className={cn(
-                "text-lg font-semibold",
-                bestStock.changePercent >= 0 ? "text-gain" : "text-loss"
-              )}>
-                {bestStock.changePercent >= 0 ? '+' : ''}{bestStock.changePercent.toFixed(2)}%
-              </p>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+        {topStocks.map((stock, index) => {
+          const style = RANK_STYLES[index];
+          const isPositive = stock.changePercent >= 0;
+          
+          return (
+            <Card 
+              key={stock.symbol} 
+              className={cn(
+                "border transition-all hover:scale-[1.02]",
+                style.bg,
+                style.border
+              )}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className={cn("text-xs font-bold", style.icon)}>
+                    {style.label}
+                  </span>
+                  {index === 0 && (
+                    <Medal className="w-4 h-4 text-yellow-500" />
+                  )}
+                </div>
+                
+                <div className="mb-2">
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-foreground text-sm">
+                      {stock.symbol.split(':')[0].replace('.NS', '').replace('.BSE', '')}
+                    </span>
+                    {index === 0 && (
+                      <span className="px-1.5 py-0.5 bg-gain/20 text-gain text-[10px] font-semibold rounded-full flex items-center gap-0.5">
+                        <TrendingUp className="w-2.5 h-2.5" />
+                        TOP
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground truncate">{stock.name}</p>
+                </div>
+                
+                <div>
+                  <p className="text-lg font-bold font-mono text-foreground">
+                    {formatPrice(stock)}
+                  </p>
+                  <p className={cn(
+                    "text-sm font-semibold flex items-center gap-1",
+                    isPositive ? "text-gain" : "text-loss"
+                  )}>
+                    {isPositive ? (
+                      <TrendingUp className="w-3 h-3" />
+                    ) : (
+                      <TrendingDown className="w-3 h-3" />
+                    )}
+                    {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                  </p>
+                </div>
 
-          <div className="mt-4 grid grid-cols-3 gap-4 pt-4 border-t border-border">
-            <div>
-              <p className="text-xs text-muted-foreground">Open</p>
-              <p className="text-sm font-semibold text-foreground">{formatPrice(bestStock.open)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">High</p>
-              <p className="text-sm font-semibold text-gain">{formatPrice(bestStock.high)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Low</p>
-              <p className="text-sm font-semibold text-loss">{formatPrice(bestStock.low)}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                <div className="mt-2 pt-2 border-t border-border/50 grid grid-cols-2 gap-1">
+                  <div>
+                    <p className="text-[9px] text-muted-foreground">High</p>
+                    <p className="text-[11px] font-mono text-gain">
+                      {isIndianStock(stock.symbol) ? '₹' : '$'}{stock.high.toFixed(2)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[9px] text-muted-foreground">Low</p>
+                    <p className="text-[11px] font-mono text-loss">
+                      {isIndianStock(stock.symbol) ? '₹' : '$'}{stock.low.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 }

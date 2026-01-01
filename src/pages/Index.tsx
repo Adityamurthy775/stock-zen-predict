@@ -12,8 +12,9 @@ import { MarketStatusIndicator } from '@/components/MarketStatusIndicator';
 import { Portfolio } from '@/components/Portfolio';
 import { Alerts } from '@/components/Alerts';
 import { BestStockOfDay } from '@/components/BestStockOfDay';
+import { Watchlist } from '@/components/Watchlist';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine } from 'lucide-react';
+import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star } from 'lucide-react';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('chart');
@@ -98,10 +99,14 @@ const Index = () => {
               <>
                 {/* Tabs - Reorganized */}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="w-full justify-start bg-card border border-border">
+                  <TabsList className="w-full justify-start bg-card border border-border flex-wrap">
                     <TabsTrigger value="chart" className="gap-2">
                       <LayoutDashboard className="w-4 h-4" />
                       Dashboard
+                    </TabsTrigger>
+                    <TabsTrigger value="watchlist" className="gap-2">
+                      <Star className="w-4 h-4" />
+                      Watchlist
                     </TabsTrigger>
                     <TabsTrigger value="portfolio" className="gap-2">
                       <Wallet className="w-4 h-4" />
@@ -141,6 +146,13 @@ const Index = () => {
                     />
                     <NewsSection news={news} />
                     <BestStockOfDay stocks={stocks} />
+                  </TabsContent>
+
+                  <TabsContent value="watchlist" className="mt-6">
+                    <Watchlist
+                      stocks={stocks}
+                      onSelectStock={selectStock}
+                    />
                   </TabsContent>
 
                   <TabsContent value="portfolio" className="mt-6">
