@@ -56,44 +56,53 @@ export function generateMockPrediction(
   };
 }
 
-// Model metrics with descriptions
+// Model metrics with descriptions - increased accuracy
 export function getMockModelMetrics(): ModelMetrics[] {
   return [
     {
       name: 'LSTM Neural Network',
       description: 'Captures long-term temporal dependencies in sequential price data for trend prediction.',
-      accuracy: 84.2,
-      mse: 0.0023,
-      mae: 0.0156,
-      r2Score: 0.892,
-      lastTrained: '2024-12-20',
+      accuracy: 94.7,
+      mse: 0.0012,
+      mae: 0.0089,
+      r2Score: 0.962,
+      lastTrained: '2025-01-01',
+    },
+    {
+      name: 'Transformer (GPT-Finance)',
+      description: 'State-of-the-art attention-based model trained on financial time series and market data.',
+      accuracy: 92.3,
+      mse: 0.0015,
+      mae: 0.0102,
+      r2Score: 0.948,
+      lastTrained: '2025-01-01',
     },
     {
       name: 'CNN Pattern Recognition',
       description: 'Identifies chart patterns and visual signals using convolutional filters on price data.',
-      accuracy: 81.5,
-      mse: 0.0031,
-      mae: 0.0189,
-      r2Score: 0.854,
-      lastTrained: '2024-12-19',
+      accuracy: 89.8,
+      mse: 0.0019,
+      mae: 0.0124,
+      r2Score: 0.921,
+      lastTrained: '2024-12-31',
     },
     {
-      name: 'Logistic Regression',
-      description: 'Binary classification model for predicting market direction (up/down) based on features.',
-      accuracy: 72.8,
-      mse: 0.0052,
-      mae: 0.0245,
-      r2Score: 0.723,
-      lastTrained: '2024-12-18',
+      name: 'Ensemble (XGBoost + LightGBM)',
+      description: 'Gradient boosting ensemble combining multiple decision tree models for robust predictions.',
+      accuracy: 87.5,
+      mse: 0.0022,
+      mae: 0.0145,
+      r2Score: 0.898,
+      lastTrained: '2024-12-31',
     },
     {
-      name: 'Sentiment Analysis',
-      description: 'Analyzes news and social media sentiment to predict market mood and price movements.',
-      accuracy: 68.5,
-      mse: 0.0078,
-      mae: 0.0312,
-      r2Score: 0.645,
-      lastTrained: '2024-12-17',
+      name: 'Sentiment Analysis (NLP)',
+      description: 'Analyzes news and social media sentiment using BERT-based models for market mood prediction.',
+      accuracy: 82.1,
+      mse: 0.0035,
+      mae: 0.0198,
+      r2Score: 0.845,
+      lastTrained: '2024-12-30',
     },
   ];
 }
