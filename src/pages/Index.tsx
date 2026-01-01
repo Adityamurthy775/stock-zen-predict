@@ -11,8 +11,9 @@ import { MarketStats } from '@/components/MarketStats';
 import { MarketStatusIndicator } from '@/components/MarketStatusIndicator';
 import { Portfolio } from '@/components/Portfolio';
 import { Alerts } from '@/components/Alerts';
+import { BestStockOfDay } from '@/components/BestStockOfDay';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, Wallet, Bell, LayoutDashboard } from 'lucide-react';
+import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine } from 'lucide-react';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('chart');
@@ -95,7 +96,7 @@ const Index = () => {
           <div className="lg:col-span-9 space-y-6">
             {selectedStock && prediction ? (
               <>
-                {/* Tabs */}
+                {/* Tabs - Reorganized */}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="w-full justify-start bg-card border border-border">
                     <TabsTrigger value="chart" className="gap-2">
@@ -110,10 +111,37 @@ const Index = () => {
                       <Bell className="w-4 h-4" />
                       Alerts
                     </TabsTrigger>
-                    <TabsTrigger value="history">History</TabsTrigger>
-                    <TabsTrigger value="prediction">Prediction</TabsTrigger>
-                    <TabsTrigger value="models">Models</TabsTrigger>
+                    <TabsTrigger value="prediction" className="gap-2">
+                      <ChartLine className="w-4 h-4" />
+                      Prediction
+                    </TabsTrigger>
+                    <TabsTrigger value="history" className="gap-2">
+                      <History className="w-4 h-4" />
+                      History
+                    </TabsTrigger>
+                    <TabsTrigger value="models" className="gap-2">
+                      <Brain className="w-4 h-4" />
+                      Models
+                    </TabsTrigger>
                   </TabsList>
+
+                  <TabsContent value="chart" className="mt-6 space-y-6">
+                    <StockChart
+                      stock={selectedStock}
+                      timeSeries={timeSeries}
+                      predictionLine={predictionLine}
+                      isMarketClosed={!marketStatus.isOpen}
+                    />
+                    <PredictionPanel
+                      prediction={prediction}
+                      period={predictionPeriod}
+                      onPeriodChange={changePredictionPeriod}
+                      isMarketClosed={!marketStatus.isOpen}
+                      stockSymbol={selectedStock.symbol}
+                    />
+                    <NewsSection news={news} />
+                    <BestStockOfDay stocks={stocks} />
+                  </TabsContent>
 
                   <TabsContent value="portfolio" className="mt-6">
                     <Portfolio
@@ -134,37 +162,20 @@ const Index = () => {
                     />
                   </TabsContent>
 
-                  <TabsContent value="chart" className="mt-6 space-y-6">
-                    <StockChart
-                      stock={selectedStock}
-                      timeSeries={timeSeries}
-                      predictionLine={predictionLine}
-                      isMarketClosed={!marketStatus.isOpen}
-                    />
-                    <PredictionPanel
-                      prediction={prediction}
-                      period={predictionPeriod}
-                      onPeriodChange={changePredictionPeriod}
-                      isMarketClosed={!marketStatus.isOpen}
-                      stockSymbol={selectedStock.symbol}
-                    />
-                    <NewsSection news={news} />
-                  </TabsContent>
-
-                  <TabsContent value="history" className="mt-6">
-                    <StockHistory 
-                      timeSeries={timeSeries} 
-                      currency={selectedStock.currency}
-                      stockSymbol={selectedStock.symbol}
-                    />
-                  </TabsContent>
-
                   <TabsContent value="prediction" className="mt-6">
                     <PredictionPanel
                       prediction={prediction}
                       period={predictionPeriod}
                       onPeriodChange={changePredictionPeriod}
                       isMarketClosed={!marketStatus.isOpen}
+                      stockSymbol={selectedStock.symbol}
+                    />
+                  </TabsContent>
+
+                  <TabsContent value="history" className="mt-6">
+                    <StockHistory 
+                      timeSeries={timeSeries} 
+                      currency={selectedStock.currency}
                       stockSymbol={selectedStock.symbol}
                     />
                   </TabsContent>
