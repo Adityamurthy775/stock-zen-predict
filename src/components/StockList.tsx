@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Search, Plus, TrendingUp, TrendingDown } from 'lucide-react';
+import { useState, useRef, useCallback, useTransition } from 'react';
+import { Search, Plus, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { searchSymbols } from '@/services/stockService';
 import type { Stock } from '@/types/stock';
@@ -22,8 +22,11 @@ export function StockList({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{symbol: string; name: string; type: string; exchange: string}>>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isAdding, setIsAdding] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
     
     if (query.length < 1) {
@@ -31,20 +34,31 @@ export function StockList({
       return;
     }
 
-    setIsSearching(true);
-    try {
-      const results = await searchSymbols(query);
-      setSearchResults(results);
-    } finally {
-      setIsSearching(false);
+    // Debounce search to prevent excessive API calls
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
     }
-  };
 
-  const handleAddStock = (symbol: string) => {
-    onAddStock(symbol);
+    debounceRef.current = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const results = await searchSymbols(query);
+        startTransition(() => {
+          setSearchResults(results);
+        });
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300);
+  }, []);
+
+  const handleAddStock = useCallback(async (symbol: string) => {
+    setIsAdding(symbol);
+    await onAddStock(symbol);
+    setIsAdding(null);
     setSearchQuery('');
     setSearchResults([]);
-  };
+  }, [onAddStock]);
 
   const formatVolume = (volume: number) => {
     if (volume >= 10000000) {
@@ -116,7 +130,8 @@ export function StockList({
                   <button
                     key={`${result.symbol}-${result.exchange}`}
                     onClick={() => handleAddStock(result.symbol)}
-                    className="w-full px-4 py-3 text-left hover:bg-secondary transition-colors flex items-center justify-between"
+                    disabled={isAdding === result.symbol}
+                    className="w-full px-4 py-3 text-left hover:bg-secondary transition-colors flex items-center justify-between disabled:opacity-50"
                   >
                     <div>
                       <span className="font-semibold text-foreground">{result.symbol}</span>
@@ -124,7 +139,11 @@ export function StockList({
                       <span className="text-xs text-primary ml-2 font-medium">{currencyLabel}</span>
                       <p className="text-sm text-muted-foreground truncate max-w-[200px]">{result.name}</p>
                     </div>
-                    <Plus className="w-4 h-4 text-gain flex-shrink-0" />
+                    {isAdding === result.symbol ? (
+                      <Loader2 className="w-4 h-4 text-gain flex-shrink-0 animate-spin" />
+                    ) : (
+                      <Plus className="w-4 h-4 text-gain flex-shrink-0" />
+                    )}
                   </button>
                 );
               })}
