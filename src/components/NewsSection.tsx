@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Newspaper, Clock, TrendingUp, TrendingDown, ExternalLink } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { NewsItem } from '@/types/stock';
@@ -10,8 +10,18 @@ interface NewsSectionProps {
 
 export function NewsSection({ news }: NewsSectionProps) {
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   
   const categories = ['all', 'earnings', 'products', 'market', 'analyst'];
+  
+  // Update timestamp periodically
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLastUpdated(new Date());
+    }, 30000); // Update every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, []);
   
   const filteredNews = activeCategory === 'all' 
     ? news 
@@ -38,6 +48,10 @@ export function NewsSection({ news }: NewsSectionProps) {
     return labels[category] || category;
   };
 
+  const handleNewsClick = (url: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   if (news.length === 0) {
     return (
       <div className="bg-card border border-border rounded-lg p-6">
@@ -58,11 +72,11 @@ export function NewsSection({ news }: NewsSectionProps) {
         <div className="flex items-center gap-2">
           <Newspaper className="w-5 h-5 text-muted-foreground" />
           <h3 className="text-lg font-semibold text-foreground">Real-Time News</h3>
-          <span className="px-2 py-0.5 bg-gain/20 text-gain text-xs font-medium rounded">LIVE</span>
+          <span className="px-2 py-0.5 bg-gain/20 text-gain text-xs font-medium rounded animate-pulse">LIVE</span>
         </div>
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Clock className="w-4 h-4" />
-          Updated {new Date().toLocaleTimeString('en-IN')}
+          Updated {lastUpdated.toLocaleTimeString('en-IN')}
         </div>
       </div>
       
@@ -78,7 +92,11 @@ export function NewsSection({ news }: NewsSectionProps) {
         <TabsContent value={activeCategory} className="mt-0">
           <div className="space-y-4 max-h-[400px] overflow-y-auto">
             {filteredNews.map((item) => (
-              <article key={item.id} className="border-l-2 border-muted pl-4 py-2 hover:bg-secondary/50 rounded-r transition-colors">
+              <article 
+                key={item.id} 
+                onClick={() => handleNewsClick(item.url)}
+                className="border-l-2 border-muted pl-4 py-2 hover:bg-secondary/50 rounded-r transition-colors cursor-pointer group"
+              >
                 <div className="flex items-center gap-2 mb-2">
                   <span className="px-2 py-0.5 rounded text-xs font-medium bg-secondary text-foreground">
                     {getCategoryLabel(item.category)}
@@ -96,19 +114,16 @@ export function NewsSection({ news }: NewsSectionProps) {
                   <span className="text-xs text-muted-foreground ml-auto">{formatTime(item.publishedAt)}</span>
                 </div>
                 
-                <h4 className="font-semibold text-foreground mb-1 line-clamp-2">{item.title}</h4>
+                <h4 className="font-semibold text-foreground mb-1 line-clamp-2 group-hover:text-primary transition-colors">
+                  {item.title}
+                </h4>
                 <p className="text-sm text-muted-foreground mb-2 line-clamp-2">{item.summary}</p>
                 
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">{item.source}</span>
-                  <a 
-                    href={item.url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline flex items-center gap-1"
-                  >
+                  <span className="text-sm text-primary flex items-center gap-1 group-hover:underline">
                     Read more <ExternalLink className="w-3 h-3" />
-                  </a>
+                  </span>
                 </div>
               </article>
             ))}

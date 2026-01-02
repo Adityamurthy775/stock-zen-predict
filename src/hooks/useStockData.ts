@@ -85,17 +85,25 @@ export function useStockData() {
 
       setStocks(results);
 
-      // Select first stock by default
-      if (results.length > 0 && !selectedStock) {
-        setSelectedStock(results[0]);
-      }
+      // Select first stock by default only on initial load
+      setSelectedStock(prev => {
+        if (prev === null && results.length > 0) {
+          return results[0];
+        }
+        // Update selected stock with fresh data if it exists
+        if (prev) {
+          const updated = results.find(s => s.symbol === prev.symbol);
+          return updated || prev;
+        }
+        return prev;
+      });
     } catch (err) {
       setError('Failed to fetch stock data');
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [selectedStock]);
+  }, []);
 
   // Fetch time series for selected stock
   const fetchSelectedStockData = useCallback(async () => {

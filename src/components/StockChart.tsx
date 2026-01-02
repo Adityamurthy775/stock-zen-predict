@@ -179,7 +179,7 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
       <div className="h-[350px]">
         {chartType === 'candlestick' ? (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={candlestickData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
+            <ComposedChart data={[...candlestickData, ...predictionLine.map(p => ({ ...p, isPrediction: true }))]} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
               <XAxis 
                 dataKey="datetime" 
                 tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
@@ -203,7 +203,7 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
                 fill="transparent"
                 shape={(props: any) => {
                   const { x, y, width, payload } = props;
-                  if (!payload) return null;
+                  if (!payload || payload.isPrediction) return null;
                   
                   const isGreen = payload.close >= payload.open;
                   const color = isGreen ? 'hsl(142, 71%, 45%)' : 'hsl(0, 84%, 60%)';
@@ -245,6 +245,19 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
                   );
                 }}
               />
+              
+              {/* Prediction line - dotted */}
+              {predictionLine.length > 0 && (
+                <Line
+                  type="monotone"
+                  dataKey="predicted"
+                  stroke="hsl(var(--chart-prediction))"
+                  strokeWidth={2}
+                  strokeDasharray="5 5"
+                  dot={{ fill: 'hsl(var(--chart-prediction))', strokeWidth: 0, r: 3 }}
+                  connectNulls={false}
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         ) : (
@@ -305,7 +318,7 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
         )}
       </div>
       
-      <div className="flex items-center gap-6 mt-4 text-sm">
+      <div className="flex items-center gap-6 mt-4 text-sm flex-wrap">
         {chartType === 'candlestick' ? (
           <>
             <div className="flex items-center gap-2">
@@ -316,6 +329,12 @@ export function StockChart({ stock, timeSeries, predictionLine, isMarketClosed }
               <div className="w-3 h-3 bg-loss rounded-sm" />
               <span className="text-muted-foreground">Bearish (Close &lt; Open)</span>
             </div>
+            {predictionLine.length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-0.5 border-t-2 border-dashed border-[hsl(var(--chart-prediction))]" />
+                <span className="text-muted-foreground">Predicted Price</span>
+              </div>
+            )}
           </>
         ) : (
           <>
