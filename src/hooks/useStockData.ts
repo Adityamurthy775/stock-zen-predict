@@ -155,17 +155,39 @@ export function useStockData() {
     setSelectedStock(stock);
   }, []);
 
-  // Add a new stock to tracking
+  // Add a new stock to tracking - optimized to prevent UI refresh delays
   const addStock = useCallback(async (symbol: string) => {
+    // Immediately add a placeholder to prevent UI jank
+    const placeholderStock: Stock = {
+      symbol,
+      name: 'Loading...',
+      price: 0,
+      change: 0,
+      changePercent: 0,
+      volume: 0,
+      previousClose: 0,
+      open: 0,
+      high: 0,
+      low: 0,
+      currency: 'USD',
+    };
+    
+    setStocks(prev => {
+      if (prev.some(s => s.symbol === symbol)) {
+        return prev;
+      }
+      return [...prev, placeholderStock];
+    });
+
+    // Fetch actual data and update
     const quote = await fetchStockQuote(symbol);
     if (quote) {
-      setStocks(prev => {
-        // Check if already exists
-        if (prev.some(s => s.symbol === quote.symbol)) {
-          return prev;
-        }
-        return [...prev, quote];
-      });
+      setStocks(prev => prev.map(s => s.symbol === symbol ? quote : s));
+      // Auto-select the newly added stock
+      setSelectedStock(quote);
+    } else {
+      // Remove placeholder if fetch failed
+      setStocks(prev => prev.filter(s => s.symbol !== symbol));
     }
   }, []);
 
