@@ -13,8 +13,9 @@ import { Portfolio } from '@/components/Portfolio';
 import { Alerts } from '@/components/Alerts';
 import { BestStockOfDay } from '@/components/BestStockOfDay';
 import { Watchlist } from '@/components/Watchlist';
+import { ComparativeChart } from '@/components/ComparativeChart';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star } from 'lucide-react';
+import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const Index = () => {
@@ -175,6 +176,10 @@ const Index = () => {
                           <Brain className="w-4 h-4" />
                           Models
                         </TabsTrigger>
+                        <TabsTrigger value="compare" className="gap-2">
+                          <GitCompareArrows className="w-4 h-4" />
+                          Compare
+                        </TabsTrigger>
                         <TabsTrigger value="history" className="gap-2">
                           <History className="w-4 h-4" />
                           History
@@ -213,6 +218,13 @@ const Index = () => {
                           onPeriodChange={changePredictionPeriod}
                           isMarketClosed={!marketStatus.isOpen}
                           stockSymbol={selectedStock.symbol}
+                        />
+                      </TabsContent>
+
+                      <TabsContent value="compare" className="mt-6">
+                        <ComparativeChart 
+                          stocks={stocks}
+                          selectedStock={selectedStock}
                         />
                       </TabsContent>
 
