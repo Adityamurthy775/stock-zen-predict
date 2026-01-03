@@ -139,9 +139,18 @@ export function useStockData() {
         setPredictionLine([]); // No prediction line on chart when market is closed
       }
       
-      // Fetch real news from Finnhub
-      const newsData = await fetchNews(selectedStock.symbol);
-      setNews(newsData);
+      // Fetch real news from Finnhub - try stock-specific first, fallback to general
+      try {
+        let newsData = await fetchNews(selectedStock.symbol);
+        if (!newsData || newsData.length === 0) {
+          // Fallback to general market news
+          newsData = await fetchNews();
+        }
+        setNews(newsData);
+      } catch (err) {
+        console.error('Error fetching news:', err);
+        setNews([]);
+      }
       
       // Get model metrics
       setModelMetrics(getMockModelMetrics());
