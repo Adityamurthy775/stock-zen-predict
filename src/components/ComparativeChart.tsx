@@ -4,15 +4,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  ResponsiveContainer, 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend 
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ReferenceLine,
 } from 'recharts';
 import { GitCompareArrows, X, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -81,7 +82,9 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
           newData[symbol] = series;
         }
       });
-      
+
+      console.log('[ComparativeChart] fetched series', results.map(r => ({ symbol: r.symbol, points: r.series.length })));
+
       setStocksData(prev => ({ ...prev, ...newData }));
       setLoading(false);
     };
@@ -141,9 +144,19 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
         }
       });
       
-      return dataPoint;
+       return dataPoint;
+     });
+   }, [selectedSymbols, stocksData, viewMode]);
+
+  useEffect(() => {
+    console.log('[ComparativeChart] state', {
+      selectedSymbols,
+      viewMode,
+      loading,
+      symbolsWithData: Object.keys(stocksData),
+      chartPoints: chartData.length,
     });
-  }, [selectedSymbols, stocksData, viewMode]);
+  }, [selectedSymbols, viewMode, loading, stocksData, chartData.length]);
 
   // Calculate performance metrics
   const performanceMetrics = useMemo(() => {
@@ -323,6 +336,12 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
               <p className="text-lg font-medium">Select stocks to compare</p>
               <p className="text-sm">Choose from the list above to see their performance</p>
             </div>
+          ) : chartData.length === 0 ? (
+            <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground">
+              <GitCompareArrows className="w-12 h-12 mb-4" />
+              <p className="text-lg font-medium">No chart data available</p>
+              <p className="text-sm">Try another stock or reduce the number of selected stocks.</p>
+            </div>
           ) : (
             <ResponsiveContainer width="100%" height={400}>
               <LineChart data={chartData}>
@@ -342,13 +361,10 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
                 <Tooltip content={<CustomTooltip />} />
                 <Legend />
                 {viewMode === 'normalized' && (
-                  <Line 
-                    type="monotone"
-                    dataKey={() => 0}
+                  <ReferenceLine
+                    y={0}
                     stroke="hsl(var(--border))"
                     strokeDasharray="5 5"
-                    dot={false}
-                    name="Baseline"
                   />
                 )}
                 {selectedSymbols.map((symbol, index) => (
