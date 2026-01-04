@@ -57,20 +57,30 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
-      const newData: Record<string, TimeSeriesPoint[]> = {};
+      const symbolsToFetch = selectedSymbols.filter(symbol => !stocksData[symbol]);
       
-      for (const symbol of selectedSymbols) {
-        if (!stocksData[symbol]) {
-          try {
-            const series = await fetchTimeSeries(symbol, '1day', 30);
-            newData[symbol] = series;
-          } catch (err) {
-            console.error(`Error fetching data for ${symbol}:`, err);
-          }
-        } else {
-          newData[symbol] = stocksData[symbol];
-        }
+      if (symbolsToFetch.length === 0) {
+        setLoading(false);
+        return;
       }
+      
+      const fetchPromises = symbolsToFetch.map(async (symbol) => {
+        try {
+          const series = await fetchTimeSeries(symbol, '1day', 30);
+          return { symbol, series };
+        } catch (err) {
+          console.error(`Error fetching data for ${symbol}:`, err);
+          return { symbol, series: [] };
+        }
+      });
+      
+      const results = await Promise.all(fetchPromises);
+      const newData: Record<string, TimeSeriesPoint[]> = {};
+      results.forEach(({ symbol, series }) => {
+        if (series.length > 0) {
+          newData[symbol] = series;
+        }
+      });
       
       setStocksData(prev => ({ ...prev, ...newData }));
       setLoading(false);
@@ -79,7 +89,7 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
     if (selectedSymbols.length > 0) {
       fetchData();
     }
-  }, [selectedSymbols]);
+  }, [selectedSymbols, stocksData]);
 
   const toggleStock = (symbol: string) => {
     setSelectedSymbols(prev => {
