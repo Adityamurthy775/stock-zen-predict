@@ -1,9 +1,16 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   ResponsiveContainer,
   LineChart,
@@ -15,7 +22,7 @@ import {
   Legend,
   ReferenceLine,
 } from 'recharts';
-import { GitCompareArrows, X, TrendingUp, TrendingDown } from 'lucide-react';
+import { GitCompareArrows, X, TrendingUp, TrendingDown, Calendar, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Stock, TimeSeriesPoint } from '@/types/stock';
 import { fetchTimeSeries } from '@/services/stockService';
@@ -29,6 +36,22 @@ interface NormalizedDataPoint {
   datetime: string;
   [key: string]: string | number;
 }
+
+type Timeframe = '1W' | '1M' | '3M' | '1Y';
+type NormalizationMode = 'percentage' | 'volume' | 'marketcap';
+
+const TIMEFRAME_CONFIG: Record<Timeframe, { label: string; days: number }> = {
+  '1W': { label: '1 Week', days: 7 },
+  '1M': { label: '1 Month', days: 30 },
+  '3M': { label: '3 Months', days: 90 },
+  '1Y': { label: '1 Year', days: 365 },
+};
+
+const NORMALIZATION_OPTIONS: { value: NormalizationMode; label: string; description: string }[] = [
+  { value: 'percentage', label: '% Change', description: 'Percentage change from start' },
+  { value: 'volume', label: 'Volume Weighted', description: 'Weighted by trading volume' },
+  { value: 'marketcap', label: 'Market Cap Weighted', description: 'Weighted by market cap' },
+];
 
 const CHART_COLORS = [
   'hsl(var(--chart-1))',
@@ -46,6 +69,8 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
   const [stocksData, setStocksData] = useState<Record<string, TimeSeriesPoint[]>>({});
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'normalized' | 'absolute'>('normalized');
+  const [timeframe, setTimeframe] = useState<Timeframe>('1M');
+  const [normalizationMode, setNormalizationMode] = useState<NormalizationMode>('percentage');
 
   // Auto-select current stock
   useEffect(() => {
@@ -54,20 +79,23 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
     }
   }, [selectedStock]);
 
+  // Clear cached data when timeframe changes to force refetch
+  const handleTimeframeChange = useCallback((newTimeframe: Timeframe) => {
+    setTimeframe(newTimeframe);
+    setStocksData({}); // Clear cache to refetch with new timeframe
+  }, []);
+
   // Fetch time series for selected stocks
   useEffect(() => {
     const fetchData = async () => {
+      if (selectedSymbols.length === 0) return;
+      
       setLoading(true);
-      const symbolsToFetch = selectedSymbols.filter(symbol => !stocksData[symbol]);
+      const days = TIMEFRAME_CONFIG[timeframe].days;
       
-      if (symbolsToFetch.length === 0) {
-        setLoading(false);
-        return;
-      }
-      
-      const fetchPromises = symbolsToFetch.map(async (symbol) => {
+      const fetchPromises = selectedSymbols.map(async (symbol) => {
         try {
-          const series = await fetchTimeSeries(symbol, '1day', 30);
+          const series = await fetchTimeSeries(symbol, '1day', days);
           return { symbol, series };
         } catch (err) {
           console.error(`Error fetching data for ${symbol}:`, err);
@@ -83,16 +111,12 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
         }
       });
 
-      console.log('[ComparativeChart] fetched series', results.map(r => ({ symbol: r.symbol, points: r.series.length })));
-
-      setStocksData(prev => ({ ...prev, ...newData }));
+      setStocksData(newData);
       setLoading(false);
     };
 
-    if (selectedSymbols.length > 0) {
-      fetchData();
-    }
-  }, [selectedSymbols, stocksData]);
+    fetchData();
+  }, [selectedSymbols, timeframe]);
 
   const toggleStock = (symbol: string) => {
     setSelectedSymbols(prev => {
@@ -110,6 +134,15 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
     setSelectedSymbols(prev => prev.filter(s => s !== symbol));
   };
 
+  // Get stock metadata for normalization
+  const getStockMeta = useCallback((symbol: string) => {
+    const stock = stocks.find(s => s.symbol === symbol);
+    return {
+      marketCap: stock?.marketCap || 1000000000, // Default 1B if unknown
+      volume: stock?.volume || 1000000, // Default 1M if unknown
+    };
+  }, [stocks]);
+
   // Prepare normalized data for comparison
   const chartData = useMemo(() => {
     if (selectedSymbols.length === 0) return [];
@@ -124,39 +157,43 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
 
     const sortedDates = Array.from(allDates).sort();
     
+    // Calculate total weights for volume/marketcap normalization
+    const totalVolume = selectedSymbols.reduce((sum, sym) => sum + getStockMeta(sym).volume, 0);
+    const totalMarketCap = selectedSymbols.reduce((sum, sym) => sum + getStockMeta(sym).marketCap, 0);
+    
     return sortedDates.map(date => {
       const dataPoint: NormalizedDataPoint = { datetime: date };
       
       selectedSymbols.forEach(symbol => {
         const series = stocksData[symbol];
-        if (!series) return;
+        if (!series || series.length === 0) return;
         
         const point = series.find(p => p.datetime.split('T')[0] === date);
         if (point) {
-          if (viewMode === 'normalized') {
-            // Normalize to percentage change from first value
-            const firstPoint = series[0];
-            const normalizedValue = ((point.close - firstPoint.close) / firstPoint.close) * 100;
-            dataPoint[symbol] = Number(normalizedValue.toFixed(2));
-          } else {
+          if (viewMode === 'absolute') {
             dataPoint[symbol] = point.close;
+          } else {
+            const firstPoint = series[0];
+            const percentChange = ((point.close - firstPoint.close) / firstPoint.close) * 100;
+            
+            if (normalizationMode === 'percentage') {
+              dataPoint[symbol] = Number(percentChange.toFixed(2));
+            } else if (normalizationMode === 'volume') {
+              // Volume-weighted: multiply % change by volume weight
+              const volumeWeight = getStockMeta(symbol).volume / totalVolume;
+              dataPoint[symbol] = Number((percentChange * volumeWeight * selectedSymbols.length).toFixed(2));
+            } else if (normalizationMode === 'marketcap') {
+              // Market cap weighted: multiply % change by market cap weight
+              const mcWeight = getStockMeta(symbol).marketCap / totalMarketCap;
+              dataPoint[symbol] = Number((percentChange * mcWeight * selectedSymbols.length).toFixed(2));
+            }
           }
         }
       });
       
-       return dataPoint;
-     });
-   }, [selectedSymbols, stocksData, viewMode]);
-
-  useEffect(() => {
-    console.log('[ComparativeChart] state', {
-      selectedSymbols,
-      viewMode,
-      loading,
-      symbolsWithData: Object.keys(stocksData),
-      chartPoints: chartData.length,
+      return dataPoint;
     });
-  }, [selectedSymbols, viewMode, loading, stocksData, chartData.length]);
+  }, [selectedSymbols, stocksData, viewMode, normalizationMode, getStockMeta]);
 
   // Calculate performance metrics
   const performanceMetrics = useMemo(() => {
@@ -179,6 +216,8 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
         change,
         changePercent,
         currentPrice: stock.price,
+        marketCap: stock.marketCap,
+        volume: stock.volume,
         color: CHART_COLORS[index % CHART_COLORS.length],
       };
     });
@@ -215,36 +254,89 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
     );
   };
 
+  const getNormalizationLabel = () => {
+    const option = NORMALIZATION_OPTIONS.find(o => o.value === normalizationMode);
+    return option?.label || '% Change';
+  };
+
   return (
     <div className="space-y-6">
       {/* Stock Selection Panel */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <GitCompareArrows className="w-5 h-5 text-primary" />
-                Compare Stocks
-              </CardTitle>
-              <CardDescription>
-                Select up to 5 stocks to compare their performance side by side
-              </CardDescription>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <GitCompareArrows className="w-5 h-5 text-primary" />
+                  Compare Stocks
+                </CardTitle>
+                <CardDescription>
+                  Select up to 5 stocks to compare their performance side by side
+                </CardDescription>
+              </div>
+              
+              {/* View Mode Toggle */}
+              <div className="flex gap-2">
+                <Button
+                  variant={viewMode === 'normalized' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('normalized')}
+                >
+                  {getNormalizationLabel()}
+                </Button>
+                <Button
+                  variant={viewMode === 'absolute' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('absolute')}
+                >
+                  Price
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant={viewMode === 'normalized' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setViewMode('normalized')}
-              >
-                % Change
-              </Button>
-              <Button
-                variant={viewMode === 'absolute' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setViewMode('absolute')}
-              >
-                Price
-              </Button>
+            
+            {/* Timeframe & Normalization Controls */}
+            <div className="flex flex-wrap gap-3 items-center">
+              {/* Timeframe Selector */}
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Timeframe:</span>
+                <div className="flex gap-1">
+                  {(Object.keys(TIMEFRAME_CONFIG) as Timeframe[]).map((tf) => (
+                    <Button
+                      key={tf}
+                      variant={timeframe === tf ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleTimeframeChange(tf)}
+                      className="px-3"
+                    >
+                      {tf}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* Normalization Mode (only show when in normalized view) */}
+              {viewMode === 'normalized' && (
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Normalize by:</span>
+                  <Select value={normalizationMode} onValueChange={(v) => setNormalizationMode(v as NormalizationMode)}>
+                    <SelectTrigger className="w-[180px] h-8">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {NORMALIZATION_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          <div className="flex flex-col">
+                            <span>{option.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -316,12 +408,14 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
       <Card>
         <CardHeader>
           <CardTitle>
-            {viewMode === 'normalized' ? 'Performance Comparison (% Change)' : 'Price Comparison'}
+            {viewMode === 'normalized' 
+              ? `Performance Comparison (${getNormalizationLabel()})` 
+              : 'Price Comparison'}
           </CardTitle>
           <CardDescription>
             {viewMode === 'normalized' 
-              ? 'Normalized performance showing percentage change from the starting point'
-              : 'Absolute price comparison over the last 30 days'
+              ? `${NORMALIZATION_OPTIONS.find(o => o.value === normalizationMode)?.description} over ${TIMEFRAME_CONFIG[timeframe].label.toLowerCase()}`
+              : `Absolute price comparison over ${TIMEFRAME_CONFIG[timeframe].label.toLowerCase()}`
             }
           </CardDescription>
         </CardHeader>
@@ -388,7 +482,7 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
       {selectedSymbols.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Performance Summary (30 Days)</CardTitle>
+            <CardTitle>Performance Summary ({TIMEFRAME_CONFIG[timeframe].label})</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -420,6 +514,11 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
                         {metric.changePercent >= 0 ? '+' : ''}{metric.changePercent.toFixed(2)}%
                       </span>
                     </div>
+                    {metric.volume && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Vol: {(metric.volume / 1000000).toFixed(2)}M
+                      </p>
+                    )}
                   </div>
                 </div>
               ))}
