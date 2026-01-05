@@ -15,7 +15,8 @@ import { BestStockOfDay } from '@/components/BestStockOfDay';
 import { Watchlist } from '@/components/Watchlist';
 import { ComparativeChart } from '@/components/ComparativeChart';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows } from 'lucide-react';
+import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target } from 'lucide-react';
+import { PredictionAccuracy } from '@/components/PredictionAccuracy';
 import { cn } from '@/lib/utils';
 
 const Index = () => {
@@ -184,6 +185,10 @@ const Index = () => {
                           <History className="w-4 h-4" />
                           History
                         </TabsTrigger>
+                        <TabsTrigger value="accuracy" className="gap-2">
+                          <Target className="w-4 h-4" />
+                          Accuracy
+                        </TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="chart" className="mt-6 space-y-6">
@@ -238,6 +243,14 @@ const Index = () => {
 
                       <TabsContent value="models" className="mt-6">
                         <ModelsPanel metrics={modelMetrics} />
+                      </TabsContent>
+
+                      <TabsContent value="accuracy" className="mt-6">
+                        <PredictionAccuracy
+                          timeSeries={timeSeries}
+                          stockSymbol={selectedStock.symbol}
+                          currency={selectedStock.currency}
+                        />
                       </TabsContent>
                     </Tabs>
                   </>
