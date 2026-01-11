@@ -5,15 +5,19 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
-import { Bell, Plus, Trash2, TrendingUp, TrendingDown, AlertTriangle, Volume2, VolumeX } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Bell, Plus, Trash2, TrendingUp, TrendingDown, AlertTriangle, Volume2, VolumeX, Activity } from 'lucide-react';
 import type { Stock } from '@/types/stock';
 
 export interface PriceAlert {
   id: string;
   symbol: string;
   name: string;
+  type: 'price' | 'deviation';
   targetPrice: number;
-  condition: 'above' | 'below';
+  deviationThreshold?: number; // Percentage (e.g., 5 for 5%)
+  predictedPrice?: number;
+  condition: 'above' | 'below' | 'deviation';
   currentPrice: number;
   isActive: boolean;
   triggered: boolean;
@@ -79,9 +83,12 @@ const playAlertSound = () => {
 
 export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAlert }: AlertsProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [alertType, setAlertType] = useState<'price' | 'deviation'>('price');
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const [targetPrice, setTargetPrice] = useState('');
   const [condition, setCondition] = useState<'above' | 'below'>('above');
+  const [deviationThreshold, setDeviationThreshold] = useState('5');
+  const [predictedPrice, setPredictedPrice] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
   const playedAlertsRef = useRef<Set<string>>(new Set());
 
@@ -101,22 +108,53 @@ export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAler
     }
   }, [alerts, soundEnabled]);
 
+  // Auto-fill predicted price when stock is selected
+  useEffect(() => {
+    if (selectedSymbol && alertType === 'deviation') {
+      const stock = stocks.find(s => s.symbol === selectedSymbol);
+      if (stock) {
+        // Use current price as a base for predicted price suggestion
+        setPredictedPrice(stock.price.toFixed(2));
+      }
+    }
+  }, [selectedSymbol, alertType, stocks]);
+
   const handleAdd = () => {
     const stock = stocks.find(s => s.symbol === selectedSymbol);
-    if (!stock || !targetPrice) return;
+    if (!stock) return;
 
-    onAddAlert({
-      symbol: stock.symbol,
-      name: stock.name,
-      targetPrice: parseFloat(targetPrice),
-      condition,
-      isActive: true,
-      currency: stock.currency || 'INR',
-    });
+    if (alertType === 'price') {
+      if (!targetPrice) return;
+      onAddAlert({
+        symbol: stock.symbol,
+        name: stock.name,
+        type: 'price',
+        targetPrice: parseFloat(targetPrice),
+        condition,
+        isActive: true,
+        currency: stock.currency || 'INR',
+      });
+    } else {
+      if (!predictedPrice || !deviationThreshold) return;
+      onAddAlert({
+        symbol: stock.symbol,
+        name: stock.name,
+        type: 'deviation',
+        targetPrice: parseFloat(predictedPrice), // Store predicted price in targetPrice for display
+        deviationThreshold: parseFloat(deviationThreshold),
+        predictedPrice: parseFloat(predictedPrice),
+        condition: 'deviation',
+        isActive: true,
+        currency: stock.currency || 'INR',
+      });
+    }
 
+    // Reset form
     setSelectedSymbol('');
     setTargetPrice('');
     setCondition('above');
+    setDeviationThreshold('5');
+    setPredictedPrice('');
     setIsDialogOpen(false);
   };
 
@@ -125,6 +163,8 @@ export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAler
     return `${currencySymbol}${value.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
   };
 
+  const priceAlerts = alerts.filter(a => a.type !== 'deviation');
+  const deviationAlerts = alerts.filter(a => a.type === 'deviation');
   const activeAlerts = alerts.filter(a => a.isActive && !a.triggered);
   const triggeredAlerts = alerts.filter(a => a.triggered);
 
@@ -158,9 +198,23 @@ export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAler
             </DialogTrigger>
             <DialogContent className="bg-card border-border">
               <DialogHeader>
-                <DialogTitle>Create Price Alert</DialogTitle>
+                <DialogTitle>Create Alert</DialogTitle>
               </DialogHeader>
               <div className="space-y-4">
+                {/* Alert Type Tabs */}
+                <Tabs value={alertType} onValueChange={(v) => setAlertType(v as 'price' | 'deviation')}>
+                  <TabsList className="w-full">
+                    <TabsTrigger value="price" className="flex-1 gap-2">
+                      <TrendingUp className="w-4 h-4" />
+                      Price Alert
+                    </TabsTrigger>
+                    <TabsTrigger value="deviation" className="flex-1 gap-2">
+                      <Activity className="w-4 h-4" />
+                      Deviation Alert
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+
                 <div>
                   <label className="text-sm text-muted-foreground">Select Stock</label>
                   <select
@@ -176,39 +230,86 @@ export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAler
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Condition</label>
-                  <div className="flex gap-2 mt-1">
-                    <Button
-                      type="button"
-                      variant={condition === 'above' ? 'default' : 'outline'}
-                      onClick={() => setCondition('above')}
-                      className="flex-1 gap-2"
-                    >
-                      <TrendingUp className="w-4 h-4" />
-                      Goes Above
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={condition === 'below' ? 'default' : 'outline'}
-                      onClick={() => setCondition('below')}
-                      className="flex-1 gap-2"
-                    >
-                      <TrendingDown className="w-4 h-4" />
-                      Goes Below
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm text-muted-foreground">Target Price</label>
-                  <Input
-                    type="number"
-                    value={targetPrice}
-                    onChange={(e) => setTargetPrice(e.target.value)}
-                    placeholder="Enter target price"
-                    className="mt-1"
-                  />
-                </div>
+
+                {alertType === 'price' ? (
+                  <>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Condition</label>
+                      <div className="flex gap-2 mt-1">
+                        <Button
+                          type="button"
+                          variant={condition === 'above' ? 'default' : 'outline'}
+                          onClick={() => setCondition('above')}
+                          className="flex-1 gap-2"
+                        >
+                          <TrendingUp className="w-4 h-4" />
+                          Goes Above
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={condition === 'below' ? 'default' : 'outline'}
+                          onClick={() => setCondition('below')}
+                          className="flex-1 gap-2"
+                        >
+                          <TrendingDown className="w-4 h-4" />
+                          Goes Below
+                        </Button>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Target Price</label>
+                      <Input
+                        type="number"
+                        value={targetPrice}
+                        onChange={(e) => setTargetPrice(e.target.value)}
+                        placeholder="Enter target price"
+                        className="mt-1"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Predicted Price</label>
+                      <Input
+                        type="number"
+                        value={predictedPrice}
+                        onChange={(e) => setPredictedPrice(e.target.value)}
+                        placeholder="Enter predicted price"
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Alert triggers when actual price deviates from this prediction
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Deviation Threshold</label>
+                      <div className="flex gap-2 mt-1">
+                        {['2', '5', '10'].map((val) => (
+                          <Button
+                            key={val}
+                            type="button"
+                            variant={deviationThreshold === val ? 'default' : 'outline'}
+                            onClick={() => setDeviationThreshold(val)}
+                            className="flex-1"
+                          >
+                            {val}%
+                          </Button>
+                        ))}
+                      </div>
+                      <Input
+                        type="number"
+                        value={deviationThreshold}
+                        onChange={(e) => setDeviationThreshold(e.target.value)}
+                        placeholder="Custom %"
+                        className="mt-2"
+                        min="0.1"
+                        step="0.1"
+                      />
+                    </div>
+                  </>
+                )}
+
                 <Button onClick={handleAdd} className="w-full gap-2">
                   <Bell className="w-4 h-4" />
                   Create Alert
@@ -234,11 +335,18 @@ export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAler
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-foreground">{alert.symbol}</span>
                       <Badge variant="outline" className="text-warning border-warning">
-                        {alert.condition === 'above' ? '↑' : '↓'} {formatPrice(alert.targetPrice, alert.symbol)}
+                        {alert.type === 'deviation' ? (
+                          <>±{alert.deviationThreshold}% from {formatPrice(alert.predictedPrice || 0, alert.symbol)}</>
+                        ) : (
+                          <>{alert.condition === 'above' ? '↑' : '↓'} {formatPrice(alert.targetPrice, alert.symbol)}</>
+                        )}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       Current: {formatPrice(alert.currentPrice, alert.symbol)}
+                      {alert.type === 'deviation' && alert.predictedPrice && (
+                        <> • Deviation: {Math.abs(((alert.currentPrice - alert.predictedPrice) / alert.predictedPrice) * 100).toFixed(1)}%</>
+                      )}
                     </p>
                   </div>
                   <Button
@@ -265,57 +373,116 @@ export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAler
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-2">
-          {alerts.filter(a => !a.triggered).map((alert) => {
-            const stock = stocks.find(s => s.symbol === alert.symbol);
-            const progress = stock 
-              ? alert.condition === 'above'
-                ? ((stock.price - alert.currentPrice) / (alert.targetPrice - alert.currentPrice)) * 100
-                : ((alert.currentPrice - stock.price) / (alert.currentPrice - alert.targetPrice)) * 100
-              : 0;
-
-            return (
-              <Card key={alert.id} className="bg-card border-border">
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-foreground">{alert.symbol}</span>
-                        <Badge 
-                          variant="outline" 
-                          className={alert.condition === 'above' ? 'text-profit border-profit' : 'text-loss border-loss'}
-                        >
-                          {alert.condition === 'above' ? (
-                            <><TrendingUp className="w-3 h-3 mr-1" /> Above</>
-                          ) : (
-                            <><TrendingDown className="w-3 h-3 mr-1" /> Below</>
-                          )}
-                        </Badge>
+        <div className="space-y-4">
+          {/* Price Alerts Section */}
+          {priceAlerts.filter(a => !a.triggered).length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" />
+                Price Alerts
+              </h4>
+              {priceAlerts.filter(a => !a.triggered).map((alert) => {
+                const stock = stocks.find(s => s.symbol === alert.symbol);
+                return (
+                  <Card key={alert.id} className="bg-card border-border">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-foreground">{alert.symbol}</span>
+                            <Badge 
+                              variant="outline" 
+                              className={alert.condition === 'above' ? 'text-profit border-profit' : 'text-loss border-loss'}
+                            >
+                              {alert.condition === 'above' ? (
+                                <><TrendingUp className="w-3 h-3 mr-1" /> Above</>
+                              ) : (
+                                <><TrendingDown className="w-3 h-3 mr-1" /> Below</>
+                              )}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Target: {formatPrice(alert.targetPrice, alert.symbol)} • Current: {formatPrice(stock?.price || alert.currentPrice, alert.symbol)}
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={alert.isActive}
+                            onCheckedChange={() => onToggleAlert(alert.id)}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onRemoveAlert(alert.id)}
+                            className="text-muted-foreground hover:text-loss"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Target: {formatPrice(alert.targetPrice, alert.symbol)} • Current: {formatPrice(stock?.price || alert.currentPrice, alert.symbol)}
-                      </p>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
-                      <Switch
-                        checked={alert.isActive}
-                        onCheckedChange={() => onToggleAlert(alert.id)}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onRemoveAlert(alert.id)}
-                        className="text-muted-foreground hover:text-loss"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Deviation Alerts Section */}
+          {deviationAlerts.filter(a => !a.triggered).length > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Activity className="w-4 h-4" />
+                Prediction Deviation Alerts
+              </h4>
+              {deviationAlerts.filter(a => !a.triggered).map((alert) => {
+                const stock = stocks.find(s => s.symbol === alert.symbol);
+                const currentDeviation = alert.predictedPrice 
+                  ? Math.abs(((stock?.price || alert.currentPrice) - alert.predictedPrice) / alert.predictedPrice) * 100
+                  : 0;
+                
+                return (
+                  <Card key={alert.id} className="bg-card border-border">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-foreground">{alert.symbol}</span>
+                            <Badge variant="outline" className="text-primary border-primary">
+                              <Activity className="w-3 h-3 mr-1" />
+                              ±{alert.deviationThreshold}%
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Predicted: {formatPrice(alert.predictedPrice || 0, alert.symbol)} • 
+                            Current: {formatPrice(stock?.price || alert.currentPrice, alert.symbol)} • 
+                            Deviation: <span className={currentDeviation > (alert.deviationThreshold || 5) ? 'text-warning' : 'text-profit'}>
+                              {currentDeviation.toFixed(1)}%
+                            </span>
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            checked={alert.isActive}
+                            onCheckedChange={() => onToggleAlert(alert.id)}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onRemoveAlert(alert.id)}
+                            className="text-muted-foreground hover:text-loss"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
