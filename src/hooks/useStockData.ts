@@ -18,6 +18,12 @@ export function useStockData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // Auto-refresh control
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
+    const saved = localStorage.getItem('autoRefreshEnabled');
+    return saved ? JSON.parse(saved) : true;
+  });
+  
   // Portfolio state
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>(() => {
     const saved = localStorage.getItem('stockPortfolio');
@@ -31,6 +37,11 @@ export function useStockData() {
   });
   
   const marketStatus = useMarketStatus();
+
+  // Save auto-refresh preference
+  useEffect(() => {
+    localStorage.setItem('autoRefreshEnabled', JSON.stringify(autoRefreshEnabled));
+  }, [autoRefreshEnabled]);
 
   // Save portfolio to localStorage
   useEffect(() => {
@@ -52,16 +63,25 @@ export function useStockData() {
     }
   }, [stocks]);
 
-  // Check alerts
+  // Check alerts (both price and deviation)
   useEffect(() => {
     if (stocks.length > 0 && alerts.length > 0) {
       setAlerts(prev => prev.map(alert => {
         const stock = stocks.find(s => s.symbol === alert.symbol);
         if (!stock || !alert.isActive || alert.triggered) return alert;
         
-        const triggered = alert.condition === 'above' 
-          ? stock.price >= alert.targetPrice
-          : stock.price <= alert.targetPrice;
+        let triggered = false;
+        
+        if (alert.type === 'deviation' && alert.predictedPrice && alert.deviationThreshold) {
+          // Deviation alert: check if actual price deviates from predicted
+          const deviationPercent = Math.abs((stock.price - alert.predictedPrice) / alert.predictedPrice) * 100;
+          triggered = deviationPercent >= alert.deviationThreshold;
+        } else {
+          // Price alert: check if price crossed target
+          triggered = alert.condition === 'above' 
+            ? stock.price >= alert.targetPrice
+            : stock.price <= alert.targetPrice;
+        }
         
         return { ...alert, currentPrice: stock.price, triggered };
       }));
@@ -260,14 +280,16 @@ export function useStockData() {
     fetchSelectedStockData();
   }, [fetchSelectedStockData]);
 
-  // Refresh data periodically (every 60 seconds)
+  // Refresh data periodically (every 60 seconds) - controlled by autoRefreshEnabled
   useEffect(() => {
+    if (!autoRefreshEnabled) return;
+    
     const interval = setInterval(() => {
       fetchAllStocks();
     }, 60000);
     
     return () => clearInterval(interval);
-  }, [fetchAllStocks]);
+  }, [fetchAllStocks, autoRefreshEnabled]);
 
   return {
     stocks,
@@ -286,6 +308,9 @@ export function useStockData() {
     removeStock,
     changePredictionPeriod,
     refreshData: fetchAllStocks,
+    // Auto-refresh control
+    autoRefreshEnabled,
+    setAutoRefreshEnabled,
     // Portfolio
     portfolio,
     addToPortfolio,
