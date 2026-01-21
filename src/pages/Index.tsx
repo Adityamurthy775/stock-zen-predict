@@ -15,9 +15,7 @@ import { BestStockOfDay } from '@/components/BestStockOfDay';
 import { Watchlist } from '@/components/Watchlist';
 import { ComparativeChart } from '@/components/ComparativeChart';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
-import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target, RefreshCw } from 'lucide-react';
+import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target } from 'lucide-react';
 import { PredictionAccuracy } from '@/components/PredictionAccuracy';
 import { cn } from '@/lib/utils';
 
@@ -39,10 +37,6 @@ const Index = () => {
     addStock,
     removeStock,
     changePredictionPeriod,
-    refreshData,
-    // Auto-refresh control
-    autoRefreshEnabled,
-    setAutoRefreshEnabled,
     // Portfolio
     portfolio,
     addToPortfolio,
@@ -70,24 +64,6 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {/* Auto-refresh toggle */}
-              <div className="flex items-center gap-2 bg-card border border-border rounded-lg px-3 py-2">
-                <span className="text-xs text-muted-foreground">Auto-refresh</span>
-                <Switch
-                  checked={autoRefreshEnabled}
-                  onCheckedChange={setAutoRefreshEnabled}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={refreshData}
-                  disabled={loading}
-                  className="h-7 w-7"
-                  title="Refresh now"
-                >
-                  <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
-                </Button>
-              </div>
               <MarketStatusIndicator />
             </div>
           </div>

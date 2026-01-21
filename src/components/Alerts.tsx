@@ -6,7 +6,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Bell, Plus, Trash2, TrendingUp, TrendingDown, AlertTriangle, Volume2, VolumeX, Activity } from 'lucide-react';
+import { Bell, Plus, Trash2, TrendingUp, TrendingDown, AlertTriangle, Volume2, VolumeX, Activity, BellRing } from 'lucide-react';
+import { requestNotificationPermission, getNotificationPermission, isNotificationSupported } from '@/utils/pushNotifications';
+import { toast } from 'sonner';
 import type { Stock } from '@/types/stock';
 
 export interface PriceAlert {
@@ -90,7 +92,24 @@ export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAler
   const [deviationThreshold, setDeviationThreshold] = useState('5');
   const [predictedPrice, setPredictedPrice] = useState('');
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const playedAlertsRef = useRef<Set<string>>(new Set());
+
+  // Check notification permission on mount
+  useEffect(() => {
+    setNotificationPermission(getNotificationPermission());
+  }, []);
+
+  // Request push notification permission
+  const handleRequestNotificationPermission = async () => {
+    const permission = await requestNotificationPermission();
+    setNotificationPermission(permission);
+    if (permission === 'granted') {
+      toast.success('Push notifications enabled!');
+    } else if (permission === 'denied') {
+      toast.error('Notification permission denied. Please enable in browser settings.');
+    }
+  };
 
   // Play sound when alerts are triggered
   useEffect(() => {
@@ -180,6 +199,25 @@ export function Alerts({ stocks, alerts, onAddAlert, onRemoveAlert, onToggleAler
           )}
         </div>
         <div className="flex items-center gap-3">
+          {/* Push notification permission button */}
+          {isNotificationSupported() && notificationPermission !== 'granted' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRequestNotificationPermission}
+              className="gap-2"
+              title="Enable push notifications"
+            >
+              <BellRing className="w-4 h-4" />
+              Enable Push
+            </Button>
+          )}
+          {notificationPermission === 'granted' && (
+            <Badge variant="outline" className="text-profit border-profit gap-1">
+              <BellRing className="w-3 h-3" />
+              Push On
+            </Badge>
+          )}
           <Button
             variant="ghost"
             size="icon"
