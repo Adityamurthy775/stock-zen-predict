@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchStockQuote, fetchTimeSeries, fetchNews, DEFAULT_STOCKS } from '@/services/stockService';
 import { generateMockPrediction, getMockModelMetrics, generatePredictionLine } from '@/services/predictionService';
 import { useMarketStatus } from '@/hooks/useMarketStatus';
+import { cacheTimeSeriesData, getCachedTimeSeriesData, isOffline } from '@/utils/offlinePrediction';
+import { showPriceAlertNotification, initializeNotifications, getNotificationPermission } from '@/utils/pushNotifications';
 import type { Stock, TimeSeriesPoint, Prediction, ModelMetrics, NewsItem, PredictionPeriod } from '@/types/stock';
 import type { PortfolioItem } from '@/components/Portfolio';
 import type { PriceAlert } from '@/components/Alerts';
@@ -18,11 +20,8 @@ export function useStockData() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  // Auto-refresh control
-  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState<boolean>(() => {
-    const saved = localStorage.getItem('autoRefreshEnabled');
-    return saved ? JSON.parse(saved) : true;
-  });
+  // Track which alerts have triggered notifications
+  const notifiedAlertsRef = useRef<Set<string>>(new Set());
   
   // Portfolio state
   const [portfolio, setPortfolio] = useState<PortfolioItem[]>(() => {
@@ -38,10 +37,10 @@ export function useStockData() {
   
   const marketStatus = useMarketStatus();
 
-  // Save auto-refresh preference
+  // Initialize push notifications on mount
   useEffect(() => {
-    localStorage.setItem('autoRefreshEnabled', JSON.stringify(autoRefreshEnabled));
-  }, [autoRefreshEnabled]);
+    initializeNotifications();
+  }, []);
 
   // Save portfolio to localStorage
   useEffect(() => {
@@ -63,7 +62,7 @@ export function useStockData() {
     }
   }, [stocks]);
 
-  // Check alerts (both price and deviation)
+  // Check alerts (both price and deviation) and send push notifications
   useEffect(() => {
     if (stocks.length > 0 && alerts.length > 0) {
       setAlerts(prev => prev.map(alert => {
@@ -81,6 +80,19 @@ export function useStockData() {
           triggered = alert.condition === 'above' 
             ? stock.price >= alert.targetPrice
             : stock.price <= alert.targetPrice;
+        }
+        
+        // Send push notification for newly triggered alerts
+        if (triggered && !notifiedAlertsRef.current.has(alert.id)) {
+          notifiedAlertsRef.current.add(alert.id);
+          showPriceAlertNotification(
+            alert.symbol,
+            alert.type,
+            stock.price,
+            alert.type === 'deviation' ? (alert.predictedPrice || 0) : alert.targetPrice,
+            alert.condition,
+            alert.currency
+          );
         }
         
         return { ...alert, currentPrice: stock.price, triggered };
@@ -125,16 +137,33 @@ export function useStockData() {
     }
   }, []);
 
-  // Fetch time series for selected stock
+  // Fetch time series for selected stock (with caching for offline support)
   const fetchSelectedStockData = useCallback(async () => {
     if (!selectedStock) return;
     
     try {
-      const series = await fetchTimeSeries(selectedStock.symbol, '1day', 60);
+      let series: TimeSeriesPoint[];
+      
+      // Check if we're offline and have cached data
+      if (isOffline()) {
+        const cached = getCachedTimeSeriesData(selectedStock.symbol);
+        if (cached) {
+          series = cached;
+          console.log('Using cached data (offline mode)');
+        } else {
+          console.warn('No cached data available offline');
+          return;
+        }
+      } else {
+        series = await fetchTimeSeries(selectedStock.symbol, '1day', 60);
+        // Cache the data for offline use
+        cacheTimeSeriesData(selectedStock.symbol, series);
+      }
+      
       setTimeSeries(series);
       
-      // Generate prediction only if market is open
-      if (marketStatus.isOpen) {
+      // Generate prediction (works offline with cached data)
+      if (marketStatus.isOpen || isOffline()) {
         const pred = generateMockPrediction(
           selectedStock.symbol,
           selectedStock.price,
@@ -159,23 +188,32 @@ export function useStockData() {
         setPredictionLine([]); // No prediction line on chart when market is closed
       }
       
-      // Fetch real news from Finnhub - try stock-specific first, fallback to general
-      try {
-        let newsData = await fetchNews(selectedStock.symbol);
-        if (!newsData || newsData.length === 0) {
-          // Fallback to general market news
-          newsData = await fetchNews();
+      // Fetch real news from Finnhub - skip if offline
+      if (!isOffline()) {
+        try {
+          let newsData = await fetchNews(selectedStock.symbol);
+          if (!newsData || newsData.length === 0) {
+            // Fallback to general market news
+            newsData = await fetchNews();
+          }
+          setNews(newsData);
+        } catch (err) {
+          console.error('Error fetching news:', err);
+          setNews([]);
         }
-        setNews(newsData);
-      } catch (err) {
-        console.error('Error fetching news:', err);
-        setNews([]);
       }
       
       // Get model metrics
       setModelMetrics(getMockModelMetrics());
     } catch (err) {
       console.error('Error fetching stock details:', err);
+      
+      // Try to use cached data on error
+      const cached = getCachedTimeSeriesData(selectedStock.symbol);
+      if (cached) {
+        setTimeSeries(cached);
+        console.log('Using cached data after fetch error');
+      }
     }
   }, [selectedStock, predictionPeriod, marketStatus.isOpen]);
 
@@ -280,17 +318,6 @@ export function useStockData() {
     fetchSelectedStockData();
   }, [fetchSelectedStockData]);
 
-  // Refresh data periodically (every 60 seconds) - controlled by autoRefreshEnabled
-  useEffect(() => {
-    if (!autoRefreshEnabled) return;
-    
-    const interval = setInterval(() => {
-      fetchAllStocks();
-    }, 60000);
-    
-    return () => clearInterval(interval);
-  }, [fetchAllStocks, autoRefreshEnabled]);
-
   return {
     stocks,
     selectedStock,
@@ -308,9 +335,6 @@ export function useStockData() {
     removeStock,
     changePredictionPeriod,
     refreshData: fetchAllStocks,
-    // Auto-refresh control
-    autoRefreshEnabled,
-    setAutoRefreshEnabled,
     // Portfolio
     portfolio,
     addToPortfolio,
