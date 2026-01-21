@@ -261,7 +261,7 @@ export const FAMOUS_STOCKS = [
   'XOM',    // Exxon Mobil
 ];
 
-// Combined default stocks for initial display
+// Combined default stocks for initial display (including commodities)
 export const DEFAULT_STOCKS = [
   // US Stocks
   'AAPL',
@@ -270,8 +270,9 @@ export const DEFAULT_STOCKS = [
   'TSLA',
   'NVDA',
   'JPM',
-  'V',
-  'KO',
+  // Commodities
+  'GLD',     // Gold ETF (SPDR Gold Shares)
+  'SLV',     // Silver ETF (iShares Silver Trust)
   // Indian Stocks
   'RELIANCE',
   'TCS',
@@ -279,15 +280,25 @@ export const DEFAULT_STOCKS = [
   'INFY',
   'ICICIBANK',
   'SBIN',
-  'WIPRO',
-  'BHARTIARTL',
 ];
 
 // All available stocks
 export const ALL_STOCKS = [...new Set([...US_STOCKS, ...INDIA_STOCKS, ...FAMOUS_STOCKS])];
 
-// Commodities with INR pricing
+// Commodities - Gold and Silver ETFs
 export const COMMODITIES = [
-  'XAU/INR', // Gold in INR
-  'XAG/INR', // Silver in INR
+  'GLD',     // SPDR Gold Shares ETF
+  'SLV',     // iShares Silver Trust ETF
+  'GDX',     // Gold Miners ETF
+  'IAU',     // iShares Gold Trust
+  'PSLV',    // Sprott Physical Silver Trust
 ];
+
+// Commodity names mapping
+export const COMMODITY_NAMES: Record<string, string> = {
+  'GLD': 'SPDR Gold Shares',
+  'SLV': 'iShares Silver Trust',
+  'GDX': 'VanEck Gold Miners ETF',
+  'IAU': 'iShares Gold Trust',
+  'PSLV': 'Sprott Physical Silver',
+};
