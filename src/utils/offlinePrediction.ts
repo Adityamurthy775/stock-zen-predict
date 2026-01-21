@@ -116,7 +116,7 @@ function calculateBollingerPosition(closes: number[], period = 20): number {
   return (closes[0] - lower) / (upper - lower);
 }
 
-// Generate offline predictions
+// Generate offline predictions with enhanced trend accuracy
 export function generateOfflinePredictions(
   timeSeries: TimeSeriesPoint[],
   symbol: string,
@@ -146,6 +146,15 @@ export function generateOfflinePredictions(
   // Calculate average volatility
   const volatility = calculateVolatility(closes);
   
+  // Enhanced trend detection using multiple signals
+  const trendSignals = calculateTrendSignals(closes, rsi, macd, sma5, sma20, bollingerPosition);
+  
+  // Commodity-specific adjustments
+  const isCommodity = ['GLD', 'SLV', 'GDX', 'IAU', 'PSLV', 'GOLD', 'SILVER'].some(c => 
+    symbol.toUpperCase().includes(c)
+  );
+  const volatilityMultiplier = isCommodity ? 0.6 : 1.0;
+  
   // Get the last date
   const lastDate = new Date(timeSeries[0].datetime);
   let currentPrice = closes[0];
@@ -160,70 +169,83 @@ export function generateOfflinePredictions(
       continue;
     }
     
-    // Calculate prediction bias based on indicators
-    let bias = 0;
-    let confidence = 60;
+    // Calculate prediction bias based on enhanced trend signals
+    let bias = trendSignals.overallBias * volatilityMultiplier;
+    let confidence = trendSignals.confidence;
     const reasons: string[] = [];
     
-    // RSI signals
-    if (rsi < 30) {
-      bias += 0.015;
-      confidence += 8;
+    // RSI signals with stronger weighting
+    if (rsi < 25) {
+      bias += 0.02;
+      confidence += 10;
+      reasons.push('Strongly oversold - high bounce probability');
+    } else if (rsi < 35) {
+      bias += 0.012;
+      confidence += 6;
       reasons.push('Oversold RSI indicates potential bounce');
-    } else if (rsi > 70) {
-      bias -= 0.015;
-      confidence += 8;
+    } else if (rsi > 75) {
+      bias -= 0.02;
+      confidence += 10;
+      reasons.push('Strongly overbought - pullback likely');
+    } else if (rsi > 65) {
+      bias -= 0.012;
+      confidence += 6;
       reasons.push('Overbought RSI suggests pullback');
     } else {
       reasons.push('RSI in neutral zone');
     }
     
-    // MACD signals
-    if (macd > 0) {
+    // MACD momentum with trend confirmation
+    if (macd > 0 && sma5 > sma20) {
+      bias += 0.015;
+      confidence += 8;
+      reasons.push('Strong bullish momentum confirmed');
+    } else if (macd < 0 && sma5 < sma20) {
+      bias -= 0.015;
+      confidence += 8;
+      reasons.push('Strong bearish momentum confirmed');
+    } else if (macd > 0) {
       bias += 0.008;
-      confidence += 5;
+      confidence += 4;
       reasons.push('Positive MACD momentum');
     } else if (macd < 0) {
       bias -= 0.008;
-      confidence += 5;
+      confidence += 4;
       reasons.push('Negative MACD momentum');
     }
     
-    // Moving average crossover
-    if (sma5 > sma20) {
-      bias += 0.005;
-      confidence += 3;
-      reasons.push('Bullish SMA crossover');
-    } else {
-      bias -= 0.005;
-      confidence += 3;
-      reasons.push('Bearish SMA crossover');
-    }
-    
-    // Bollinger Band mean reversion
-    if (bollingerPosition < 0.2) {
-      bias += 0.012;
-      confidence += 6;
+    // Bollinger Band mean reversion with enhanced logic
+    if (bollingerPosition < 0.15) {
+      bias += 0.018;
+      confidence += 8;
+      reasons.push('Price at lower Bollinger extreme - strong reversal signal');
+    } else if (bollingerPosition < 0.25) {
+      bias += 0.01;
+      confidence += 5;
       reasons.push('Price near lower Bollinger Band');
-    } else if (bollingerPosition > 0.8) {
-      bias -= 0.012;
-      confidence += 6;
+    } else if (bollingerPosition > 0.85) {
+      bias -= 0.018;
+      confidence += 8;
+      reasons.push('Price at upper Bollinger extreme - reversal likely');
+    } else if (bollingerPosition > 0.75) {
+      bias -= 0.01;
+      confidence += 5;
       reasons.push('Price near upper Bollinger Band');
     }
     
-    // Momentum factor (with decay over prediction horizon)
-    const decayFactor = Math.pow(0.9, i);
-    bias += (momentum * 0.001) * decayFactor;
+    // Momentum factor with decay over prediction horizon
+    const decayFactor = Math.pow(0.85, i);
+    bias += (momentum * 0.0015) * decayFactor;
     
-    // Add some controlled randomness for realistic variation
-    const randomFactor = (Math.random() - 0.5) * volatility * 0.3;
+    // Add controlled randomness for realistic variation (reduced for commodities)
+    const randomFactor = (Math.random() - 0.5) * volatility * 0.25 * volatilityMultiplier;
     
     // Calculate predicted price
     const predictedPrice = currentPrice * (1 + bias + randomFactor);
     
-    // Reduce confidence for further out predictions
-    confidence = Math.max(40, confidence - (i * 2));
-    confidence = Math.min(90, confidence);
+    // Reduce confidence for further out predictions (slower decay)
+    confidence = Math.max(45, confidence - (i * 1.5));
+    confidence = Math.min(94, confidence);
     
     predictions.push({
       date: predictionDate.toISOString().split('T')[0],
@@ -245,6 +267,54 @@ export function generateOfflinePredictions(
   }
   
   return predictions;
+}
+
+// Enhanced trend signal calculation
+function calculateTrendSignals(
+  closes: number[],
+  rsi: number,
+  macd: number,
+  sma5: number,
+  sma20: number,
+  bollingerPosition: number
+): { overallBias: number; confidence: number } {
+  let bullishSignals = 0;
+  let bearishSignals = 0;
+  let signalStrength = 0;
+  
+  // RSI signals
+  if (rsi < 30) { bullishSignals += 2; signalStrength += 2; }
+  else if (rsi < 40) { bullishSignals += 1; signalStrength += 1; }
+  else if (rsi > 70) { bearishSignals += 2; signalStrength += 2; }
+  else if (rsi > 60) { bearishSignals += 1; signalStrength += 1; }
+  
+  // MACD signals
+  if (macd > 0) { bullishSignals += 1; signalStrength += 1; }
+  else if (macd < 0) { bearishSignals += 1; signalStrength += 1; }
+  
+  // SMA crossover
+  if (sma5 > sma20) { bullishSignals += 1; signalStrength += 1; }
+  else if (sma5 < sma20) { bearishSignals += 1; signalStrength += 1; }
+  
+  // Bollinger position
+  if (bollingerPosition < 0.2) { bullishSignals += 1; signalStrength += 1; }
+  else if (bollingerPosition > 0.8) { bearishSignals += 1; signalStrength += 1; }
+  
+  // Price momentum (comparing current to 5-period average)
+  const currentPrice = closes[0];
+  const avgPrice = closes.slice(0, 5).reduce((a, b) => a + b, 0) / Math.min(5, closes.length);
+  if (currentPrice > avgPrice * 1.02) { bullishSignals += 1; }
+  else if (currentPrice < avgPrice * 0.98) { bearishSignals += 1; }
+  
+  const netSignal = bullishSignals - bearishSignals;
+  const overallBias = netSignal * 0.004; // Each net signal adds ~0.4% bias
+  
+  // Confidence based on signal alignment
+  const totalSignals = bullishSignals + bearishSignals;
+  const alignment = totalSignals > 0 ? Math.abs(netSignal) / totalSignals : 0;
+  const confidence = 55 + (alignment * 25) + (signalStrength * 2);
+  
+  return { overallBias, confidence: Math.min(90, confidence) };
 }
 
 // Calculate historical volatility
