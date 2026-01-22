@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, forwardRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -274,11 +274,11 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
     });
   }, [selectedSymbols, stocksData, stocks]);
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
+  const CustomTooltip = forwardRef<HTMLDivElement, any>(({ active, payload, label }, ref) => {
     if (!active || !payload) return null;
 
     return (
-      <div className="bg-card border border-border rounded-lg shadow-lg p-3">
+      <div ref={ref} className="bg-card border border-border rounded-lg shadow-lg p-3">
         <p className="text-sm font-medium text-foreground mb-2">
           {new Date(label).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
         </p>
@@ -303,7 +303,8 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
         </div>
       </div>
     );
-  };
+  });
+  CustomTooltip.displayName = 'CustomTooltip';
 
   const getNormalizationLabel = () => {
     const option = NORMALIZATION_OPTIONS.find(o => o.value === normalizationMode);
