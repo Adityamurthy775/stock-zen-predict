@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Trash2, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import type { Stock } from '@/types/stock';
@@ -28,6 +28,16 @@ export function Portfolio({ stocks, portfolio, onAddToPortfolio, onRemoveFromPor
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const [quantity, setQuantity] = useState('');
   const [buyPrice, setBuyPrice] = useState('');
+
+  // Auto-fill current price when stock is selected
+  useEffect(() => {
+    if (selectedSymbol) {
+      const stock = stocks.find(s => s.symbol === selectedSymbol);
+      if (stock) {
+        setBuyPrice(stock.price.toFixed(2));
+      }
+    }
+  }, [selectedSymbol, stocks]);
 
   const handleAdd = () => {
     const stock = stocks.find(s => s.symbol === selectedSymbol);

@@ -1,9 +1,12 @@
-import { useState, useRef, useCallback, useTransition } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import { Search, Plus, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { searchSymbols } from '@/services/stockService';
 import type { Stock } from '@/types/stock';
 import { cn } from '@/lib/utils';
+
+// Cache for search results to reduce API calls
+const searchCache = new Map<string, Array<{symbol: string; name: string; type: string; exchange: string}>>();
 
 interface StockListProps {
   stocks: Stock[];
@@ -23,8 +26,8 @@ export function StockList({
   const [searchResults, setSearchResults] = useState<Array<{symbol: string; name: string; type: string; exchange: string}>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isAdding, setIsAdding] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleSearch = useCallback(async (query: string) => {
     setSearchQuery(query);
@@ -34,30 +37,53 @@ export function StockList({
       return;
     }
 
-    // Debounce search to prevent excessive API calls
+    // Check cache first
+    const cached = searchCache.get(query.toUpperCase());
+    if (cached) {
+      setSearchResults(cached);
+      return;
+    }
+
+    // Debounce search - reduced to 150ms for snappier response
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
 
+    // Cancel previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     debounceRef.current = setTimeout(async () => {
       setIsSearching(true);
+      abortControllerRef.current = new AbortController();
+      
       try {
         const results = await searchSymbols(query);
-        startTransition(() => {
-          setSearchResults(results);
-        });
+        // Cache results
+        searchCache.set(query.toUpperCase(), results);
+        setSearchResults(results);
+      } catch (error) {
+        // Ignore abort errors
+        if ((error as Error).name !== 'AbortError') {
+          console.error('Search error:', error);
+        }
       } finally {
         setIsSearching(false);
       }
-    }, 300);
+    }, 150);
   }, []);
 
-  const handleAddStock = useCallback(async (symbol: string) => {
+  const handleAddStock = useCallback((symbol: string) => {
     setIsAdding(symbol);
-    await onAddStock(symbol);
-    setIsAdding(null);
-    setSearchQuery('');
-    setSearchResults([]);
+    // Don't await - let it run in background for instant UI feedback
+    onAddStock(symbol);
+    // Clear UI immediately for snappy response
+    setTimeout(() => {
+      setIsAdding(null);
+      setSearchQuery('');
+      setSearchResults([]);
+    }, 100);
   }, [onAddStock]);
 
   const formatVolume = (volume: number) => {
