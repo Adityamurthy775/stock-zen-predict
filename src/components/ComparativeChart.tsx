@@ -64,6 +64,25 @@ const CHART_COLORS = [
   'hsl(30 90% 55%)',
 ];
 
+// Helper to detect currency based on stock exchange
+const getCurrencyFromSymbol = (symbol: string): string => {
+  const upperSymbol = symbol.toUpperCase();
+  // Indian exchanges: NSE (.NS) and BSE (.BO or .BSE)
+  if (upperSymbol.includes('.NS') || upperSymbol.includes('.BO') || upperSymbol.includes('.BSE')) {
+    return 'INR';
+  }
+  // Default to USD for international stocks (NYSE, NASDAQ, etc.)
+  return 'USD';
+};
+
+const formatCurrency = (value: number, symbol: string): string => {
+  const currency = getCurrencyFromSymbol(symbol);
+  if (currency === 'INR') {
+    return `₹${value.toLocaleString('en-IN')}`;
+  }
+  return `$${value.toLocaleString('en-US')}`;
+};
+
 export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProps) {
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
   const [stocksData, setStocksData] = useState<Record<string, TimeSeriesPoint[]>>({});
@@ -276,7 +295,7 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
               )}>
                 {viewMode === 'normalized' 
                   ? `${entry.value > 0 ? '+' : ''}${entry.value.toFixed(2)}%`
-                  : `₹${entry.value.toLocaleString()}`
+                  : formatCurrency(entry.value, entry.dataKey)
                 }
               </span>
             </div>
@@ -481,7 +500,15 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
                 <YAxis 
                   stroke="hsl(var(--muted-foreground))"
                   fontSize={12}
-                  tickFormatter={(value) => viewMode === 'normalized' ? `${value}%` : `₹${value.toLocaleString()}`}
+                  tickFormatter={(value) => {
+                    if (viewMode === 'normalized') return `${value}%`;
+                    // For absolute mode, show $ as default (mixed currencies in Y-axis)
+                    const hasIndianStock = selectedSymbols.some(s => getCurrencyFromSymbol(s) === 'INR');
+                    const hasUSStock = selectedSymbols.some(s => getCurrencyFromSymbol(s) === 'USD');
+                    if (hasIndianStock && !hasUSStock) return `₹${value.toLocaleString('en-IN')}`;
+                    if (hasUSStock && !hasIndianStock) return `$${value.toLocaleString('en-US')}`;
+                    return value.toLocaleString(); // Mixed currencies, show just number
+                  }}
                   domain={viewMode === 'normalized' ? ['auto', 'auto'] : ['auto', 'auto']}
                 />
                 <Tooltip content={<CustomTooltip />} />
@@ -538,7 +565,7 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
                     </div>
                     <p className="text-sm text-muted-foreground truncate">{metric.name}</p>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-sm">₹{metric.currentPrice?.toLocaleString()}</span>
+                      <span className="text-sm">{formatCurrency(metric.currentPrice || 0, metric.symbol)}</span>
                       <span className={cn(
                         "text-sm font-medium",
                         metric.changePercent >= 0 ? "text-chart-up" : "text-chart-down"
