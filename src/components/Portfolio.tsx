@@ -39,16 +39,29 @@ export function Portfolio({ stocks, portfolio, onAddToPortfolio, onRemoveFromPor
     }
   }, [selectedSymbol, stocks]);
 
+  // Detect currency based on stock exchange
+  const getCurrencyFromSymbol = (symbol: string): string => {
+    const upperSymbol = symbol.toUpperCase();
+    // Indian exchanges: NSE (.NS) and BSE (.BO or .BSE)
+    if (upperSymbol.includes('.NS') || upperSymbol.includes('.BO') || upperSymbol.includes('.BSE')) {
+      return 'INR';
+    }
+    // Default to USD for international stocks (NYSE, NASDAQ, etc.)
+    return 'USD';
+  };
+
   const handleAdd = () => {
     const stock = stocks.find(s => s.symbol === selectedSymbol);
     if (!stock || !quantity || !buyPrice) return;
+
+    const currency = getCurrencyFromSymbol(stock.symbol);
 
     onAddToPortfolio({
       symbol: stock.symbol,
       name: stock.name,
       quantity: parseFloat(quantity),
       buyPrice: parseFloat(buyPrice),
-      currency: stock.currency || 'INR',
+      currency,
     });
 
     setSelectedSymbol('');
