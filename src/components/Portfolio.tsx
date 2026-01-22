@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Trash2, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import type { Stock } from '@/types/stock';
+import { PortfolioPieChart } from '@/components/PortfolioPieChart';
 
 export interface PortfolioItem {
   symbol: string;
@@ -85,6 +86,9 @@ export function Portfolio({ stocks, portfolio, onAddToPortfolio, onRemoveFromPor
 
   return (
     <div className="space-y-4">
+      {/* Portfolio Pie Charts */}
+      <PortfolioPieChart portfolio={portfolio} />
+
       {/* Portfolio Summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-card border-border">
