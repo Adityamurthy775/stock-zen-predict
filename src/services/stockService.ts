@@ -134,6 +134,109 @@ export async function fetchTimeSeries(
 }
 
 export async function searchSymbols(query: string): Promise<Array<{symbol: string; name: string; type: string; exchange: string}>> {
+  const localSearchSymbols = (q: string) => {
+    const needle = (q || '').trim().toUpperCase();
+    if (!needle) return [] as Array<{symbol: string; name: string; type: string; exchange: string}>;
+
+    const nameMap: Record<string, string> = {
+      // US
+      AAPL: 'Apple',
+      MSFT: 'Microsoft',
+      GOOGL: 'Alphabet',
+      AMZN: 'Amazon',
+      META: 'Meta',
+      TSLA: 'Tesla',
+      NVDA: 'NVIDIA',
+      JPM: 'JPMorgan Chase',
+      V: 'Visa',
+      KO: 'Coca-Cola',
+      WMT: 'Walmart',
+      JNJ: 'Johnson & Johnson',
+      PG: 'Procter & Gamble',
+      UNH: 'UnitedHealth',
+      HD: 'Home Depot',
+      MA: 'Mastercard',
+      DIS: 'Disney',
+      NFLX: 'Netflix',
+      PYPL: 'PayPal',
+      INTC: 'Intel',
+      // India
+      RELIANCE: 'Reliance Industries',
+      TCS: 'Tata Consultancy Services',
+      HDFCBANK: 'HDFC Bank',
+      INFY: 'Infosys',
+      ICICIBANK: 'ICICI Bank',
+      HINDUNILVR: 'Hindustan Unilever',
+      SBIN: 'State Bank of India',
+      BHARTIARTL: 'Bharti Airtel',
+      ITC: 'ITC Limited',
+      KOTAKBANK: 'Kotak Mahindra Bank',
+      LT: 'Larsen & Toubro',
+      AXISBANK: 'Axis Bank',
+      WIPRO: 'Wipro',
+      ASIANPAINT: 'Asian Paints',
+      MARUTI: 'Maruti Suzuki',
+      HCLTECH: 'HCL Technologies',
+      SUNPHARMA: 'Sun Pharmaceutical',
+      TITAN: 'Titan Company',
+      ULTRACEMCO: 'UltraTech Cement',
+      BAJFINANCE: 'Bajaj Finance',
+      // Famous
+      CSCO: 'Cisco',
+      PEP: 'PepsiCo',
+      ADBE: 'Adobe',
+      CRM: 'Salesforce',
+      NKE: 'Nike',
+      CMCSA: 'Comcast',
+      VZ: 'Verizon',
+      T: 'AT&T',
+      BA: 'Boeing',
+      XOM: 'Exxon Mobil',
+      // Commodities
+      ...COMMODITY_NAMES,
+    };
+
+    const toItem = (symbol: string, exchange: string, type: string) => {
+      const sym = symbol.toUpperCase();
+      return {
+        symbol: sym,
+        name: nameMap[sym] || sym,
+        type,
+        exchange,
+      };
+    };
+
+    const universe = [
+      ...US_STOCKS.map((s) => toItem(s, 'NYSE/NASDAQ', 'Equity')),
+      ...INDIA_STOCKS.map((s) => toItem(s, 'NSE/BSE', 'Equity')),
+      ...FAMOUS_STOCKS.map((s) => toItem(s, 'NYSE/NASDAQ', 'Equity')),
+      ...COMMODITIES.map((s) => toItem(s, 'ETF', 'ETF')),
+    ];
+
+    const ranked = universe
+      .filter((item) => {
+        const sym = item.symbol.toUpperCase();
+        const nm = item.name.toUpperCase();
+        return sym.includes(needle) || nm.includes(needle);
+      })
+      .sort((a, b) => {
+        const score = (x: { symbol: string; name: string }) => {
+          const sym = x.symbol.toUpperCase();
+          const nm = x.name.toUpperCase();
+          if (sym === needle) return 100;
+          if (sym.startsWith(needle)) return 90;
+          if (nm.startsWith(needle)) return 75;
+          if (sym.includes(needle)) return 60;
+          if (nm.includes(needle)) return 50;
+          return 0;
+        };
+        return score(b) - score(a);
+      })
+      .slice(0, 15);
+
+    return ranked;
+  };
+
   try {
     const response = await fetch(`${SUPABASE_URL}/functions/v1/stock-data`, {
       method: 'POST',
@@ -152,19 +255,33 @@ export async function searchSymbols(query: string): Promise<Array<{symbol: strin
 
     const data = await response.json();
     
+    // If provider search is unavailable (missing key / rate limit), keep UX usable.
     if (data.error || !data.data) {
-      return [];
+      return localSearchSymbols(query);
     }
 
-    return data.data.slice(0, 15).map((item: any) => ({
-      symbol: item.symbol,
-      name: item.name || item.instrument_name,
-      type: item.type || item.instrument_type,
-      exchange: item.exchange,
+    const remote = data.data.slice(0, 15).map((item: any) => ({
+      symbol: (item.symbol || '').toString().toUpperCase(),
+      name: item.name || item.instrument_name || item.symbol,
+      type: item.type || item.instrument_type || 'Equity',
+      exchange: item.exchange || item.region || '',
     }));
+
+    // Merge local + remote (dedupe by symbol) so users can find stocks by company name even if remote results are thin.
+    const local = localSearchSymbols(query);
+    const seen = new Set<string>();
+    const merged: typeof remote = [];
+    for (const item of [...local, ...remote]) {
+      const key = (item.symbol || '').toUpperCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+      if (merged.length >= 15) break;
+    }
+    return merged;
   } catch (error) {
     console.error('Error searching symbols:', error);
-    return [];
+    return localSearchSymbols(query);
   }
 }
 
