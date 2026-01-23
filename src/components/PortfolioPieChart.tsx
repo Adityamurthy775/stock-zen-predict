@@ -8,18 +8,32 @@ interface PortfolioPieChartProps {
   portfolio: PortfolioItem[];
 }
 
-const COLORS = [
-  'hsl(var(--chart-1))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-  'hsl(210 80% 60%)',
-  'hsl(280 70% 60%)',
-  'hsl(30 90% 55%)',
-  'hsl(150 60% 50%)',
-  'hsl(350 70% 55%)',
+// Vibrant color palette for pie charts
+const HOLDING_COLORS = [
+  '#FF6B6B', // Coral Red
+  '#4ECDC4', // Teal
+  '#45B7D1', // Sky Blue
+  '#96CEB4', // Sage Green
+  '#FFEAA7', // Soft Yellow
+  '#DDA0DD', // Plum
+  '#98D8C8', // Mint
+  '#F7DC6F', // Golden
+  '#BB8FCE', // Lavender
+  '#85C1E9', // Light Blue
+  '#F8B500', // Amber
+  '#00CED1', // Dark Cyan
 ];
+
+const SECTOR_COLORS: Record<string, string> = {
+  'Technology': '#3B82F6',  // Blue
+  'Finance': '#10B981',     // Emerald
+  'Healthcare': '#EF4444',  // Red
+  'Energy': '#F59E0B',      // Amber
+  'Consumer': '#8B5CF6',    // Violet
+  'Industrial': '#6366F1',  // Indigo
+  'Telecom': '#14B8A6',     // Teal
+  'Other': '#6B7280',       // Gray
+};
 
 // Sector mapping based on common stock categories
 const getSectorFromSymbol = (symbol: string): string => {
@@ -87,7 +101,7 @@ export function PortfolioPieChart({ portfolio }: PortfolioPieChartProps) {
       name: item.symbol,
       value: item.currentPrice * item.quantity,
       currency: item.currency,
-      color: COLORS[index % COLORS.length],
+      color: HOLDING_COLORS[index % HOLDING_COLORS.length],
     }));
   }, [portfolio]);
 
@@ -111,12 +125,12 @@ export function PortfolioPieChart({ portfolio }: PortfolioPieChartProps) {
       }
     });
     
-    return Object.entries(sectorMap).map(([name, data], index) => ({
+    return Object.entries(sectorMap).map(([name, data]) => ({
       name,
       value: data.value,
       inr: data.inr,
       usd: data.usd,
-      color: COLORS[index % COLORS.length],
+      color: SECTOR_COLORS[name] || SECTOR_COLORS['Other'],
     }));
   }, [portfolio]);
 
