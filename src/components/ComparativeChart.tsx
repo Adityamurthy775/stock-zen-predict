@@ -104,32 +104,6 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
     setStocksData({}); // Clear cache to refetch with new timeframe
   }, []);
 
-  // Generate mock time series data when API fails
-  const generateMockTimeSeries = useCallback((symbol: string, days: number): TimeSeriesPoint[] => {
-    const data: TimeSeriesPoint[] = [];
-    const stock = stocks.find(s => s.symbol === symbol);
-    const basePrice = stock?.price || 100 + Math.random() * 500;
-    const today = new Date();
-    
-    for (let i = days; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      
-      const volatility = 0.02; // 2% daily volatility
-      const change = (Math.random() - 0.5) * 2 * volatility * basePrice;
-      const price = basePrice + change * (days - i) / 10;
-      
-      data.push({
-        datetime: date.toISOString().split('T')[0],
-        open: price * (1 - Math.random() * 0.01),
-        high: price * (1 + Math.random() * 0.02),
-        low: price * (1 - Math.random() * 0.02),
-        close: price,
-        volume: Math.floor(Math.random() * 10000000) + 1000000,
-      });
-    }
-    return data;
-  }, [stocks]);
 
   // Fetch time series for selected stocks
   useEffect(() => {
@@ -142,15 +116,10 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
       const fetchPromises = selectedSymbols.map(async (symbol) => {
         try {
           const series = await fetchTimeSeries(symbol, '1day', days);
-          // If API returns empty, use mock data
-          if (!series || series.length === 0) {
-            console.log(`Using mock data for ${symbol} due to API limits`);
-            return { symbol, series: generateMockTimeSeries(symbol, days) };
-          }
-          return { symbol, series };
+          return { symbol, series: series || [] };
         } catch (err) {
           console.error(`Error fetching data for ${symbol}:`, err);
-          return { symbol, series: generateMockTimeSeries(symbol, days) };
+          return { symbol, series: [] };
         }
       });
       
@@ -167,7 +136,7 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
     };
 
     fetchData();
-  }, [selectedSymbols, timeframe, generateMockTimeSeries]);
+  }, [selectedSymbols, timeframe]);
 
   const toggleStock = (symbol: string) => {
     setSelectedSymbols(prev => {
