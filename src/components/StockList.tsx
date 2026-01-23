@@ -60,9 +60,30 @@ export function StockList({
       
       try {
         const results = await searchSymbols(query);
+        // Filter to show most relevant results - prioritize exact matches and common exchanges
+        const filteredResults = results
+          .filter((r) => {
+            // Prioritize NSE, BSE, NASDAQ, NYSE exchanges
+            const preferredExchanges = ['NSE', 'BSE', 'NASDAQ', 'NYSE', 'National Stock Exchange', 'Bombay Stock Exchange'];
+            return preferredExchanges.some(ex => r.exchange?.toUpperCase().includes(ex.toUpperCase())) || 
+                   r.symbol.toUpperCase().startsWith(query.toUpperCase());
+          })
+          .sort((a, b) => {
+            // Prioritize exact symbol matches
+            const aExact = a.symbol.toUpperCase() === query.toUpperCase();
+            const bExact = b.symbol.toUpperCase() === query.toUpperCase();
+            if (aExact && !bExact) return -1;
+            if (!aExact && bExact) return 1;
+            // Then prioritize symbols that start with query
+            const aStarts = a.symbol.toUpperCase().startsWith(query.toUpperCase());
+            const bStarts = b.symbol.toUpperCase().startsWith(query.toUpperCase());
+            if (aStarts && !bStarts) return -1;
+            if (!aStarts && bStarts) return 1;
+            return 0;
+          });
         // Cache results
-        searchCache.set(query.toUpperCase(), results);
-        setSearchResults(results);
+        searchCache.set(query.toUpperCase(), filteredResults.length > 0 ? filteredResults : results);
+        setSearchResults(filteredResults.length > 0 ? filteredResults : results);
       } catch (error) {
         // Ignore abort errors
         if ((error as Error).name !== 'AbortError') {
