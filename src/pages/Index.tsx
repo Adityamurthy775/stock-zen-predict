@@ -14,6 +14,7 @@ import { Alerts } from '@/components/Alerts';
 import { BestStockOfDay } from '@/components/BestStockOfDay';
 import { Watchlist } from '@/components/Watchlist';
 import { ComparativeChart } from '@/components/ComparativeChart';
+import { StockChatbot } from '@/components/StockChatbot';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target } from 'lucide-react';
 import { PredictionAccuracy } from '@/components/PredictionAccuracy';
@@ -268,6 +269,9 @@ const Index = () => {
           </>
         )}
       </main>
+
+      {/* Stock Market Chatbot */}
+      <StockChatbot />
     </div>
   );
 };
