@@ -18,6 +18,8 @@ export function useStockData() {
   const [modelMetrics, setModelMetrics] = useState<ModelMetrics[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [stocksLoading, setStocksLoading] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   
   // Track which alerts have triggered notifications
@@ -103,6 +105,8 @@ export function useStockData() {
   // Fetch all tracked stocks
   const fetchAllStocks = useCallback(async () => {
     setLoading(true);
+    setStocksLoading(true);
+    setLoadingMessage('Fetching stock data...');
     setError(null);
 
     try {
@@ -110,7 +114,9 @@ export function useStockData() {
 
       // Reduce API usage by fetching sequentially (prevents provider rate-limit bursts)
       const results: Stock[] = [];
-      for (const sym of allSymbols) {
+      for (let i = 0; i < allSymbols.length; i++) {
+        const sym = allSymbols[i];
+        setLoadingMessage(`Loading ${sym} (${i + 1}/${allSymbols.length})...`);
         const quote = await fetchStockQuote(sym);
         if (quote) results.push(quote);
       }
@@ -134,6 +140,8 @@ export function useStockData() {
       console.error(err);
     } finally {
       setLoading(false);
+      setStocksLoading(false);
+      setLoadingMessage('');
     }
   }, []);
 
@@ -224,6 +232,10 @@ export function useStockData() {
 
   // Add a new stock to tracking - optimized to prevent UI refresh delays
   const addStock = useCallback(async (symbol: string) => {
+    // Show loading indicator
+    setStocksLoading(true);
+    setLoadingMessage(`Adding ${symbol}...`);
+    
     // Immediately add a placeholder to prevent UI jank
     const placeholderStock: Stock = {
       symbol,
@@ -256,6 +268,9 @@ export function useStockData() {
       // Remove placeholder if fetch failed
       setStocks(prev => prev.filter(s => s.symbol !== symbol));
     }
+    
+    setStocksLoading(false);
+    setLoadingMessage('');
   }, []);
 
   // Remove a stock from tracking
@@ -328,6 +343,8 @@ export function useStockData() {
     modelMetrics,
     news,
     loading,
+    stocksLoading,
+    loadingMessage,
     error,
     marketStatus,
     selectStock,
