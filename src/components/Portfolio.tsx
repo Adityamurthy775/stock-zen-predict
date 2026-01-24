@@ -71,8 +71,9 @@ export function Portfolio({ stocks, portfolio, onAddToPortfolio, onRemoveFromPor
     setIsDialogOpen(false);
   };
 
-  const formatPrice = (value: number, currency = 'INR') => {
-    return new Intl.NumberFormat('en-IN', {
+  const formatPrice = (value: number, currency = 'USD') => {
+    const locale = currency === 'INR' ? 'en-IN' : 'en-US';
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency,
       minimumFractionDigits: 2,
@@ -97,7 +98,7 @@ export function Portfolio({ stocks, portfolio, onAddToPortfolio, onRemoveFromPor
               <Wallet className="w-4 h-4" />
               <span className="text-sm">Total Investment</span>
             </div>
-            <p className="text-xl font-bold text-foreground">{formatPrice(totalInvestment)}</p>
+            <p className="text-xl font-bold text-foreground">{formatPrice(totalInvestment, portfolio[0]?.currency || 'USD')}</p>
           </CardContent>
         </Card>
         
@@ -107,7 +108,7 @@ export function Portfolio({ stocks, portfolio, onAddToPortfolio, onRemoveFromPor
               <TrendingUp className="w-4 h-4" />
               <span className="text-sm">Current Value</span>
             </div>
-            <p className="text-xl font-bold text-foreground">{formatPrice(totalCurrentValue)}</p>
+            <p className="text-xl font-bold text-foreground">{formatPrice(totalCurrentValue, portfolio[0]?.currency || 'USD')}</p>
           </CardContent>
         </Card>
         
@@ -122,7 +123,7 @@ export function Portfolio({ stocks, portfolio, onAddToPortfolio, onRemoveFromPor
               <span className="text-sm">Total P&L</span>
             </div>
             <p className={`text-xl font-bold ${totalGainLoss >= 0 ? 'text-profit' : 'text-loss'}`}>
-              {totalGainLoss >= 0 ? '+' : ''}{formatPrice(totalGainLoss)}
+              {totalGainLoss >= 0 ? '+' : ''}{formatPrice(totalGainLoss, portfolio[0]?.currency || 'USD')}
               <span className="text-sm ml-2">({totalGainLossPercent.toFixed(2)}%)</span>
             </p>
           </CardContent>
@@ -217,10 +218,10 @@ export function Portfolio({ stocks, portfolio, onAddToPortfolio, onRemoveFromPor
                     </div>
                     
                     <div className="text-right mr-4">
-                      <p className="font-semibold text-foreground">{formatPrice(item.currentPrice * item.quantity)}</p>
+                      <p className="font-semibold text-foreground">{formatPrice(item.currentPrice * item.quantity, item.currency)}</p>
                       <div className={`flex items-center justify-end gap-1 text-sm ${isPositive ? 'text-profit' : 'text-loss'}`}>
                         {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                        <span>{isPositive ? '+' : ''}{formatPrice(gainLoss)} ({gainLossPercent.toFixed(2)}%)</span>
+                        <span>{isPositive ? '+' : ''}{formatPrice(gainLoss, item.currency)} ({gainLossPercent.toFixed(2)}%)</span>
                       </div>
                     </div>
                     

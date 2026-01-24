@@ -37,21 +37,21 @@ export function StockList({
       return;
     }
 
-    // Check cache first
+    // Check cache first for instant response
     const cached = searchCache.get(query.toUpperCase());
     if (cached) {
       setSearchResults(cached);
       return;
     }
 
-    // Debounce search - reduced to 150ms for snappier response
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
     // Cancel previous request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
+    }
+
+    // Debounce search - reduced to 100ms for snappier response
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
     }
 
     debounceRef.current = setTimeout(async () => {
@@ -66,24 +66,33 @@ export function StockList({
             // Prioritize NSE, BSE, NASDAQ, NYSE exchanges
             const preferredExchanges = ['NSE', 'BSE', 'NASDAQ', 'NYSE', 'National Stock Exchange', 'Bombay Stock Exchange'];
             return preferredExchanges.some(ex => r.exchange?.toUpperCase().includes(ex.toUpperCase())) || 
-                   r.symbol.toUpperCase().startsWith(query.toUpperCase());
+                   r.symbol.toUpperCase().startsWith(query.toUpperCase()) ||
+                   r.name.toUpperCase().includes(query.toUpperCase());
           })
           .sort((a, b) => {
+            const q = query.toUpperCase();
             // Prioritize exact symbol matches
-            const aExact = a.symbol.toUpperCase() === query.toUpperCase();
-            const bExact = b.symbol.toUpperCase() === query.toUpperCase();
+            const aExact = a.symbol.toUpperCase() === q;
+            const bExact = b.symbol.toUpperCase() === q;
             if (aExact && !bExact) return -1;
             if (!aExact && bExact) return 1;
             // Then prioritize symbols that start with query
-            const aStarts = a.symbol.toUpperCase().startsWith(query.toUpperCase());
-            const bStarts = b.symbol.toUpperCase().startsWith(query.toUpperCase());
+            const aStarts = a.symbol.toUpperCase().startsWith(q);
+            const bStarts = b.symbol.toUpperCase().startsWith(q);
             if (aStarts && !bStarts) return -1;
             if (!aStarts && bStarts) return 1;
+            // Then prioritize names that start with query
+            const aNameStarts = a.name.toUpperCase().startsWith(q);
+            const bNameStarts = b.name.toUpperCase().startsWith(q);
+            if (aNameStarts && !bNameStarts) return -1;
+            if (!aNameStarts && bNameStarts) return 1;
             return 0;
-          });
-        // Cache results
-        searchCache.set(query.toUpperCase(), filteredResults.length > 0 ? filteredResults : results);
-        setSearchResults(filteredResults.length > 0 ? filteredResults : results);
+          })
+          .slice(0, 10); // Limit to 10 results for faster rendering
+        
+        // Cache results immediately
+        searchCache.set(query.toUpperCase(), filteredResults.length > 0 ? filteredResults : results.slice(0, 10));
+        setSearchResults(filteredResults.length > 0 ? filteredResults : results.slice(0, 10));
       } catch (error) {
         // Ignore abort errors
         if ((error as Error).name !== 'AbortError') {
@@ -92,7 +101,7 @@ export function StockList({
       } finally {
         setIsSearching(false);
       }
-    }, 150);
+    }, 100); // Reduced debounce for faster response
   }, []);
 
   const handleAddStock = useCallback((symbol: string) => {
