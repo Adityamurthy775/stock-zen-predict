@@ -15,6 +15,7 @@ import { BestStockOfDay } from '@/components/BestStockOfDay';
 import { Watchlist } from '@/components/Watchlist';
 import { ComparativeChart } from '@/components/ComparativeChart';
 import { StockChatbot } from '@/components/StockChatbot';
+import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target } from 'lucide-react';
 import { PredictionAccuracy } from '@/components/PredictionAccuracy';
@@ -33,6 +34,8 @@ const Index = () => {
     modelMetrics,
     news,
     loading,
+    stocksLoading,
+    loadingMessage,
     marketStatus,
     selectStock,
     addStock,
@@ -272,6 +275,9 @@ const Index = () => {
 
       {/* Stock Market Chatbot */}
       <StockChatbot />
+      
+      {/* Loading Overlay */}
+      <LoadingOverlay isLoading={stocksLoading} message={loadingMessage} />
     </div>
   );
 };

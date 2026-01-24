@@ -529,9 +529,20 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
                     type="monotone"
                     dataKey={symbol}
                     stroke={CHART_COLORS[index % CHART_COLORS.length]}
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4 }}
+                    strokeWidth={3}
+                    dot={{ 
+                      r: 4, 
+                      fill: CHART_COLORS[index % CHART_COLORS.length],
+                      stroke: 'hsl(var(--background))',
+                      strokeWidth: 2
+                    }}
+                    activeDot={{ 
+                      r: 7, 
+                      fill: CHART_COLORS[index % CHART_COLORS.length],
+                      stroke: 'hsl(var(--background))',
+                      strokeWidth: 3
+                    }}
+                    connectNulls={true}
                   />
                 ))}
               </LineChart>
