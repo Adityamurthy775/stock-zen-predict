@@ -486,18 +486,21 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
             }
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="h-[400px] flex items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <CardContent className="relative">
+          {/* Loading badge - shown while fetching without hiding chart */}
+          {loading && (
+            <div className="absolute top-2 right-2 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/90 border border-border shadow-md backdrop-blur-sm">
+              <div className="w-3 h-3 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+              <span className="text-xs font-medium text-muted-foreground">Updating...</span>
             </div>
-          ) : selectedSymbols.length === 0 ? (
+          )}
+          {selectedSymbols.length === 0 ? (
             <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground">
               <GitCompareArrows className="w-12 h-12 mb-4" />
               <p className="text-lg font-medium">Select stocks to compare</p>
               <p className="text-sm">Choose from the list above to see their performance</p>
             </div>
-          ) : chartData.length === 0 ? (
+          ) : chartData.length === 0 && !loading ? (
             <div className="h-[400px] flex flex-col items-center justify-center text-muted-foreground">
               <GitCompareArrows className="w-12 h-12 mb-4" />
               <p className="text-lg font-medium">No chart data available</p>
