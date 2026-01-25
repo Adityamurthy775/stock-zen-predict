@@ -30,6 +30,32 @@ const isIndianStock = (sym: string): boolean => {
   return INDIA_STOCKS.includes(baseSym);
 };
 
+type IndianExchange = 'NSE' | 'BSE';
+
+const normalizeSymbol = (sym: string): { baseSymbol: string; exchange?: IndianExchange; isIndian: boolean } => {
+  const raw = (sym || '').trim();
+  const upper = raw.toUpperCase();
+
+  // Accept forms like NSE:RELIANCE, BSE:ADANIENT
+  const exchangePrefix = upper.includes(':') ? upper.split(':')[0] : '';
+  const afterPrefix = upper.includes(':') ? upper.split(':').slice(1).join(':') : upper;
+
+  let exchange: IndianExchange | undefined;
+  if (exchangePrefix === 'NSE') exchange = 'NSE';
+  if (exchangePrefix === 'BSE') exchange = 'BSE';
+
+  // Accept forms like RELIANCE.NS / ADANIENT.BSE / INFY.BO
+  let baseSymbol = afterPrefix.replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+  if (!exchange) {
+    if (afterPrefix.endsWith('.NS')) exchange = 'NSE';
+    if (afterPrefix.endsWith('.BO') || afterPrefix.endsWith('.BSE')) exchange = 'BSE';
+  }
+
+  // Decide “Indian” if either suffix/prefix suggests it OR it's in our India list.
+  const isIndian = Boolean(exchange) || isIndianStock(baseSymbol);
+  return { baseSymbol, exchange, isIndian };
+};
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -39,21 +65,73 @@ serve(async (req) => {
   try {
     const ALPHA_VANTAGE_API_KEY = Deno.env.get('ALPHA_VANTAGE_API_KEY');
     const FINNHUB_API_KEY = Deno.env.get('FINNHUB_API_KEY');
+    const TWELVE_DATA_API_KEY = Deno.env.get('TWELVE_DATA_API_KEY');
     
     const { action, symbol, interval, outputsize, symbols } = await req.json();
     console.log(`Stock data request: action=${action}, symbol=${symbol}, interval=${interval}`);
 
     const ALPHA_VANTAGE_URL = 'https://www.alphavantage.co/query';
     const FINNHUB_URL = 'https://finnhub.io/api/v1';
+    const TWELVE_DATA_URL = 'https://api.twelvedata.com';
 
     // Helper to format symbol for Alpha Vantage
     const formatSymbolForAlphaVantage = (sym: string): string => {
-      const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
-      // Indian stocks need .BSE suffix for Alpha Vantage
-      if (isIndianStock(baseSym)) {
-        return `${baseSym}.BSE`;
+      const { baseSymbol, exchange, isIndian } = normalizeSymbol(sym);
+      // Alpha Vantage support for Indian equities is spotty; keep legacy mapping as fallback.
+      if (isIndian) {
+        // Prefer BSE only when explicitly requested; otherwise keep BSE legacy for backward compatibility.
+        return exchange === 'NSE' ? `${baseSymbol}.NSE` : `${baseSymbol}.BSE`;
       }
-      return baseSym;
+      return baseSymbol;
+    };
+
+    const fetchTwelveDataQuote = async (sym: string) => {
+      if (!TWELVE_DATA_API_KEY) return { ok: false as const, error: 'Twelve Data API key not configured' };
+      const { baseSymbol, exchange } = normalizeSymbol(sym);
+      const params = new URLSearchParams({
+        symbol: baseSymbol,
+        apikey: TWELVE_DATA_API_KEY,
+      });
+      if (exchange) params.set('exchange', exchange);
+      const url = `${TWELVE_DATA_URL}/quote?${params.toString()}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+      if (!response.ok || data?.status === 'error') {
+        return { ok: false as const, error: data?.message || 'Failed to fetch quote' };
+      }
+      return { ok: true as const, data };
+    };
+
+    const fetchTwelveDataTimeSeries = async (sym: string, int: string, size: number) => {
+      if (!TWELVE_DATA_API_KEY) return { ok: false as const, error: 'Twelve Data API key not configured' };
+      const { baseSymbol, exchange } = normalizeSymbol(sym);
+
+      // Map our intervals to Twelve Data intervals
+      const intervalMap: Record<string, string> = {
+        '1day': '1day',
+        '1week': '1week',
+        '1month': '1month',
+        '1h': '1h',
+        '4h': '4h',
+      };
+      const tdInterval = intervalMap[int] || int;
+
+      const params = new URLSearchParams({
+        symbol: baseSymbol,
+        interval: tdInterval,
+        outputsize: String(size),
+        apikey: TWELVE_DATA_API_KEY,
+      });
+      if (exchange) params.set('exchange', exchange);
+      const url = `${TWELVE_DATA_URL}/time_series?${params.toString()}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+      if (!response.ok || data?.status === 'error' || !data?.values) {
+        return { ok: false as const, error: data?.message || 'Failed to fetch time series' };
+      }
+      return { ok: true as const, data };
     };
 
     if (action === 'quote') {
@@ -82,6 +160,39 @@ serve(async (req) => {
         });
       };
 
+      // Prefer Twelve Data for Indian symbols (supports NSE/BSE more reliably than Alpha Vantage).
+      const { baseSymbol, exchange, isIndian } = normalizeSymbol(symbol);
+      if (isIndian && TWELVE_DATA_API_KEY) {
+        try {
+          const td = await fetchTwelveDataQuote(symbol);
+          if (td.ok) {
+            const q = td.data;
+            const transformedQuote = {
+              symbol: baseSymbol,
+              name: q.name || baseSymbol,
+              exchange: exchange || q.exchange || 'NSE',
+              currency: q.currency || 'INR',
+              datetime: q.datetime || new Date().toISOString(),
+              open: q.open,
+              high: q.high,
+              low: q.low,
+              close: q.close,
+              volume: q.volume,
+              previous_close: q.previous_close,
+              change: q.change,
+              percent_change: q.percent_change,
+              is_market_open: q.is_market_open ?? true,
+              market_cap: q.market_cap,
+              fifty_two_week: q.fifty_two_week,
+            };
+            return cacheAndReturn(transformedQuote);
+          }
+          console.error('Twelve Data quote error:', td.error);
+        } catch (err) {
+          console.error('Twelve Data quote fetch error:', err);
+        }
+      }
+
       const formattedSymbol = formatSymbolForAlphaVantage(symbol);
       const url = `${ALPHA_VANTAGE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(formattedSymbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`;
       console.log(`Fetching quote from Alpha Vantage for ${formattedSymbol}`);
@@ -95,8 +206,8 @@ serve(async (req) => {
           const quote = data['Global Quote'];
           
           // Determine currency based on stock type
-          const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
-          const currency = isIndianStock(baseSym) ? 'INR' : 'USD';
+          const { baseSymbol: baseSym } = normalizeSymbol(symbol);
+          const currency = normalizeSymbol(symbol).isIndian ? 'INR' : 'USD';
 
           const price = parseFloat(quote['05. price']) || 0;
           const previousClose = parseFloat(quote['08. previous close']) || 0;
@@ -106,7 +217,7 @@ serve(async (req) => {
           const transformedQuote = {
             symbol: quote['01. symbol']?.replace('.BSE', '') || symbol,
             name: quote['01. symbol']?.replace('.BSE', '') || symbol,
-            exchange: isIndianStock(baseSym) ? 'BSE' : 'NYSE',
+            exchange: normalizeSymbol(symbol).isIndian ? 'BSE' : 'NYSE',
             currency: currency,
             datetime: quote['07. latest trading day'] || new Date().toISOString(),
             open: parseFloat(quote['02. open']) || 0,
@@ -202,6 +313,23 @@ serve(async (req) => {
 
       const size = outputsize || 100;
       const int = interval || '1day';
+
+      // Prefer Twelve Data for Indian symbols (NSE/BSE).
+      const norm = normalizeSymbol(symbol);
+      if (norm.isIndian && TWELVE_DATA_API_KEY) {
+        try {
+          const td = await fetchTwelveDataTimeSeries(symbol, int, size);
+          if (td.ok) {
+            // Twelve Data already returns { values: [...] }
+            return new Response(JSON.stringify({ values: td.data.values }), {
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          console.error('Twelve Data time series error:', td.error);
+        } catch (err) {
+          console.error('Twelve Data time series fetch error:', err);
+        }
+      }
       
       const formattedSymbol = formatSymbolForAlphaVantage(symbol);
       

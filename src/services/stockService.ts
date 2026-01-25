@@ -7,6 +7,30 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const quoteCache = new Map<string, { data: Stock; timestamp: number }>();
 const CACHE_TTL = 60000; // 1 minute cache TTL
 
+// Used only for fallback currency/price shaping when live APIs fail.
+const INDIA_STOCKS_FOR_FALLBACK = new Set([
+  'RELIANCE',
+  'TCS',
+  'HDFCBANK',
+  'INFY',
+  'ICICIBANK',
+  'HINDUNILVR',
+  'SBIN',
+  'BHARTIARTL',
+  'ITC',
+  'KOTAKBANK',
+  'LT',
+  'AXISBANK',
+  'WIPRO',
+  'ASIANPAINT',
+  'MARUTI',
+  'HCLTECH',
+  'SUNPHARMA',
+  'TITAN',
+  'ULTRACEMCO',
+  'BAJFINANCE',
+]);
+
 // Get cached quote if still valid
 const getCachedQuote = (symbol: string): Stock | null => {
   const cached = quoteCache.get(symbol.toUpperCase());
@@ -23,7 +47,15 @@ const setCachedQuote = (symbol: string, data: Stock): void => {
 
 // Generate fallback stock data when API fails
 const generateFallbackStock = (symbol: string): Stock => {
-  const isIndian = symbol.includes('.NS') || symbol.includes('.BO') || symbol.includes('.BSE');
+  const upper = symbol.toUpperCase();
+  const base = upper.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+  const isIndian =
+    upper.includes('.NS') ||
+    upper.includes('.BO') ||
+    upper.includes('.BSE') ||
+    upper.startsWith('NSE:') ||
+    upper.startsWith('BSE:') ||
+    INDIA_STOCKS_FOR_FALLBACK.has(base);
 
   // Deterministic (seeded) fallback so prices don't look "randomly wrong" on each refresh
   const hashString = (str: string) => {
