@@ -24,8 +24,29 @@ const setCachedQuote = (symbol: string, data: Stock): void => {
 // Generate fallback stock data when API fails
 const generateFallbackStock = (symbol: string): Stock => {
   const isIndian = symbol.includes('.NS') || symbol.includes('.BO') || symbol.includes('.BSE');
-  const basePrice = isIndian ? 1500 + Math.random() * 3000 : 100 + Math.random() * 200;
-  const change = (Math.random() - 0.5) * basePrice * 0.05;
+
+  // Deterministic (seeded) fallback so prices don't look "randomly wrong" on each refresh
+  const hashString = (str: string) => {
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  };
+
+  const mulberry32 = (a: number) => {
+    return () => {
+      let t = (a += 0x6D2B79F5);
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+
+  const rng = mulberry32(hashString(symbol.toUpperCase()));
+  const basePrice = isIndian ? 1500 + rng() * 3000 : 100 + rng() * 200;
+  const change = (rng() - 0.5) * basePrice * 0.05;
   
   return {
     symbol: symbol.toUpperCase(),
