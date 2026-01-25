@@ -102,35 +102,31 @@ export function useStockData() {
     }
   }, [stocks]);
 
-  // Fetch all tracked stocks
+  // Fetch all tracked stocks - parallel for speed
   const fetchAllStocks = useCallback(async () => {
     setLoading(true);
     setStocksLoading(true);
-    setLoadingMessage('Fetching stock data...');
+    setLoadingMessage('Loading stocks...');
     setError(null);
 
     try {
       const allSymbols = [...DEFAULT_STOCKS];
 
-      // Reduce API usage by fetching sequentially (prevents provider rate-limit bursts)
-      const results: Stock[] = [];
-      for (let i = 0; i < allSymbols.length; i++) {
-        const sym = allSymbols[i];
-        setLoadingMessage(`Loading ${sym} (${i + 1}/${allSymbols.length})...`);
-        const quote = await fetchStockQuote(sym);
-        if (quote) results.push(quote);
-      }
+      // Fetch all stocks in parallel for faster loading
+      const fetchPromises = allSymbols.map(sym => fetchStockQuote(sym));
+      const results = await Promise.all(fetchPromises);
+      const validResults = results.filter((quote): quote is Stock => quote !== null);
 
-      setStocks(results);
+      setStocks(validResults);
 
       // Select first stock by default only on initial load
       setSelectedStock(prev => {
-        if (prev === null && results.length > 0) {
-          return results[0];
+        if (prev === null && validResults.length > 0) {
+          return validResults[0];
         }
         // Update selected stock with fresh data if it exists
         if (prev) {
-          const updated = results.find(s => s.symbol === prev.symbol);
+          const updated = validResults.find(s => s.symbol === prev.symbol);
           return updated || prev;
         }
         return prev;
@@ -230,48 +226,29 @@ export function useStockData() {
     setSelectedStock(stock);
   }, []);
 
-  // Add a new stock to tracking - optimized to prevent UI refresh delays
+  // Add a new stock to tracking - optimized for instant feedback
   const addStock = useCallback(async (symbol: string) => {
-    // Show loading indicator
+    // Check if already added
+    if (stocks.some(s => s.symbol.toUpperCase() === symbol.toUpperCase())) {
+      const existing = stocks.find(s => s.symbol.toUpperCase() === symbol.toUpperCase());
+      if (existing) setSelectedStock(existing);
+      return;
+    }
+
+    // Show brief loading
     setStocksLoading(true);
     setLoadingMessage(`Adding ${symbol}...`);
-    
-    // Immediately add a placeholder to prevent UI jank
-    const placeholderStock: Stock = {
-      symbol,
-      name: 'Loading...',
-      price: 0,
-      change: 0,
-      changePercent: 0,
-      volume: 0,
-      previousClose: 0,
-      open: 0,
-      high: 0,
-      low: 0,
-      currency: 'USD',
-    };
-    
-    setStocks(prev => {
-      if (prev.some(s => s.symbol === symbol)) {
-        return prev;
-      }
-      return [...prev, placeholderStock];
-    });
 
-    // Fetch actual data and update
+    // Fetch data (uses cache if available)
     const quote = await fetchStockQuote(symbol);
     if (quote) {
-      setStocks(prev => prev.map(s => s.symbol === symbol ? quote : s));
-      // Auto-select the newly added stock
+      setStocks(prev => [...prev, quote]);
       setSelectedStock(quote);
-    } else {
-      // Remove placeholder if fetch failed
-      setStocks(prev => prev.filter(s => s.symbol !== symbol));
     }
     
     setStocksLoading(false);
     setLoadingMessage('');
-  }, []);
+  }, [stocks]);
 
   // Remove a stock from tracking
   const removeStock = useCallback((symbol: string) => {

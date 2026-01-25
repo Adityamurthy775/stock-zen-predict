@@ -526,20 +526,20 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
                 {selectedSymbols.map((symbol, index) => (
                   <Line
                     key={symbol}
-                    type="monotone"
+                    type="linear"
                     dataKey={symbol}
                     stroke={CHART_COLORS[index % CHART_COLORS.length]}
-                    strokeWidth={3}
+                    strokeWidth={2}
                     dot={{ 
-                      r: 4, 
-                      fill: CHART_COLORS[index % CHART_COLORS.length],
-                      stroke: 'hsl(var(--background))',
+                      r: 5, 
+                      fill: 'white',
+                      stroke: CHART_COLORS[index % CHART_COLORS.length],
                       strokeWidth: 2
                     }}
                     activeDot={{ 
-                      r: 7, 
-                      fill: CHART_COLORS[index % CHART_COLORS.length],
-                      stroke: 'hsl(var(--background))',
+                      r: 8, 
+                      fill: 'white',
+                      stroke: CHART_COLORS[index % CHART_COLORS.length],
                       strokeWidth: 3
                     }}
                     connectNulls={true}
