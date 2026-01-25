@@ -91,6 +91,16 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
   const [timeframe, setTimeframe] = useState<Timeframe>('1M');
   const [normalizationMode, setNormalizationMode] = useState<NormalizationMode>('percentage');
 
+  // Recharts treats `dataKey` strings with '.' as nested access (e.g. "SBIN.BSE"),
+  // so we map symbols -> safe keys for the chart dataset.
+  const seriesKeyBySymbol = useMemo(() => {
+    const map: Record<string, string> = {};
+    selectedSymbols.forEach((sym, idx) => {
+      map[sym] = `series_${idx}`;
+    });
+    return map;
+  }, [selectedSymbols]);
+
   // Auto-select current stock
   useEffect(() => {
     if (selectedStock && !selectedSymbols.includes(selectedStock.symbol)) {
@@ -220,25 +230,28 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
       selectedSymbols.forEach(symbol => {
         const series = stocksData[symbol];
         if (!series || series.length === 0) return;
+
+        const key = seriesKeyBySymbol[symbol];
+        if (!key) return;
         
         const point = series.find(p => p.datetime.split('T')[0] === date);
         if (point) {
           if (viewMode === 'absolute') {
-            dataPoint[symbol] = point.close;
+            dataPoint[key] = point.close;
           } else {
             const firstPoint = series[0];
             const percentChange = ((point.close - firstPoint.close) / firstPoint.close) * 100;
             
             if (normalizationMode === 'percentage') {
-              dataPoint[symbol] = Number(percentChange.toFixed(2));
+              dataPoint[key] = Number(percentChange.toFixed(2));
             } else if (normalizationMode === 'volume') {
               // Volume-weighted: multiply % change by volume weight
               const volumeWeight = getStockMeta(symbol).volume / totalVolume;
-              dataPoint[symbol] = Number((percentChange * volumeWeight * selectedSymbols.length).toFixed(2));
+              dataPoint[key] = Number((percentChange * volumeWeight * selectedSymbols.length).toFixed(2));
             } else if (normalizationMode === 'marketcap') {
               // Market cap weighted: multiply % change by market cap weight
               const mcWeight = getStockMeta(symbol).marketCap / totalMarketCap;
-              dataPoint[symbol] = Number((percentChange * mcWeight * selectedSymbols.length).toFixed(2));
+              dataPoint[key] = Number((percentChange * mcWeight * selectedSymbols.length).toFixed(2));
             }
           }
         }
@@ -246,7 +259,7 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
       
       return dataPoint;
     });
-  }, [selectedSymbols, stocksData, viewMode, normalizationMode, getStockMeta]);
+  }, [selectedSymbols, stocksData, viewMode, normalizationMode, getStockMeta, seriesKeyBySymbol]);
 
   // Calculate performance metrics
   const performanceMetrics = useMemo(() => {
@@ -291,13 +304,13 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
                 className="w-3 h-3 rounded-full" 
                 style={{ backgroundColor: entry.color }} 
               />
-              <span className="font-medium">{entry.dataKey}:</span>
+              <span className="font-medium">{entry.name || entry.dataKey}:</span>
               <span className={cn(
                 viewMode === 'normalized' && (entry.value > 0 ? 'text-chart-up' : entry.value < 0 ? 'text-chart-down' : 'text-foreground')
               )}>
                 {viewMode === 'normalized' 
                   ? `${entry.value > 0 ? '+' : ''}${entry.value.toFixed(2)}%`
-                  : formatCurrency(entry.value, entry.dataKey)
+                  : formatCurrency(entry.value, entry.name || entry.dataKey)
                 }
               </span>
             </div>
@@ -527,18 +540,20 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
                   <Line
                     key={symbol}
                     type="linear"
-                    dataKey={symbol}
+                    dataKey={seriesKeyBySymbol[symbol]}
+                    name={symbol}
                     stroke={CHART_COLORS[index % CHART_COLORS.length]}
                     strokeWidth={2}
+                    isAnimationActive={false}
                     dot={{ 
                       r: 5, 
-                      fill: 'white',
+                      fill: 'hsl(var(--foreground))',
                       stroke: CHART_COLORS[index % CHART_COLORS.length],
                       strokeWidth: 2
                     }}
                     activeDot={{ 
                       r: 8, 
-                      fill: 'white',
+                      fill: 'hsl(var(--foreground))',
                       stroke: CHART_COLORS[index % CHART_COLORS.length],
                       strokeWidth: 3
                     }}
