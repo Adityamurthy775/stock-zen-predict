@@ -340,41 +340,6 @@ export function PredictionAccuracy({ timeSeries, stockSymbol, currency = '₹' }
 
   return (
     <div className="space-y-6">
-      {/* AI Model Section */}
-      <Card className="border-primary/20 bg-gradient-to-r from-primary/5 to-transparent">
-        <CardHeader>
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="w-5 h-5 text-primary" />
-                AI-Enhanced Prediction Model
-              </CardTitle>
-              <CardDescription>
-                Using technical analysis with RSI, MACD, Bollinger Bands, and EMA indicators
-              </CardDescription>
-            </div>
-            <Button 
-              onClick={fetchAIPredictions} 
-              disabled={isLoadingAI}
-              className="gap-2"
-            >
-              {isLoadingAI ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4" />
-              )}
-              {isLoadingAI ? 'Generating...' : 'Generate AI Forecast'}
-            </Button>
-          </div>
-        </CardHeader>
-        {overallAnalysis && (
-          <CardContent>
-            <div className="bg-muted/50 rounded-lg p-4">
-              <p className="text-sm text-muted-foreground">{overallAnalysis}</p>
-            </div>
-          </CardContent>
-        )}
-      </Card>
 
       {/* Stats Cards */}
       {stats && (
