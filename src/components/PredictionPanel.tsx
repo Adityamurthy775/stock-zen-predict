@@ -1,8 +1,20 @@
 import { Calendar, TrendingUp, TrendingDown } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ReferenceLine,
+} from 'recharts';
 import type { Prediction, PredictionPeriod } from '@/types/stock';
 import { cn } from '@/lib/utils';
+import { useMemo } from 'react';
 
 interface PredictionPanelProps {
   prediction: Prediction;
@@ -10,6 +22,7 @@ interface PredictionPanelProps {
   onPeriodChange: (period: PredictionPeriod) => void;
   isMarketClosed?: boolean;
   stockSymbol?: string;
+  currentPrice?: number;
 }
 
 // Known Indian stock symbols
@@ -27,9 +40,93 @@ const isIndianStock = (symbol: string) => {
          INDIAN_STOCK_SYMBOLS.some(s => upperSymbol.includes(s));
 };
 
-export function PredictionPanel({ prediction, period, onPeriodChange, isMarketClosed, stockSymbol = '' }: PredictionPanelProps) {
+// Generate prediction chart data with dotted forecast line
+const generatePredictionChartData = (
+  currentPrice: number,
+  predictedPrice: number,
+  lowerBound: number,
+  upperBound: number,
+  period: PredictionPeriod
+) => {
+  const periodDays: Record<PredictionPeriod, number> = {
+    '1d': 1,
+    '5d': 5,
+    '15d': 15,
+    '3m': 90,
+  };
+  
+  const days = periodDays[period];
+  const data = [];
+  const today = new Date();
+  
+  // Historical simulated data (last 5 points)
+  for (let i = 5; i >= 1; i--) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const variation = (Math.random() - 0.5) * 0.02 * currentPrice;
+    data.push({
+      date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      price: Number((currentPrice + variation - (currentPrice - predictedPrice) * (i / 10)).toFixed(2)),
+      predicted: null,
+      upperBound: null,
+      lowerBound: null,
+      isToday: false,
+      isFuture: false,
+    });
+  }
+  
+  // Today's point (connects historical to prediction)
+  data.push({
+    date: 'Today',
+    price: currentPrice,
+    predicted: currentPrice,
+    upperBound: null,
+    lowerBound: null,
+    isToday: true,
+    isFuture: false,
+  });
+  
+  // Future prediction points with dotted line
+  const priceStep = (predictedPrice - currentPrice) / days;
+  const upperStep = (upperBound - currentPrice) / days;
+  const lowerStep = (lowerBound - currentPrice) / days;
+  
+  const futurePoints = Math.min(days, 10); // Cap at 10 points for readability
+  const stepMultiplier = days / futurePoints;
+  
+  for (let i = 1; i <= futurePoints; i++) {
+    const futureDate = new Date(today);
+    futureDate.setDate(futureDate.getDate() + Math.round(i * stepMultiplier));
+    const progress = (i * stepMultiplier) / days;
+    
+    data.push({
+      date: futureDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      price: null,
+      predicted: Number((currentPrice + priceStep * i * stepMultiplier).toFixed(2)),
+      upperBound: Number((currentPrice + upperStep * i * stepMultiplier).toFixed(2)),
+      lowerBound: Number((currentPrice + lowerStep * i * stepMultiplier).toFixed(2)),
+      isToday: false,
+      isFuture: true,
+    });
+  }
+  
+  return data;
+};
+
+export function PredictionPanel({ prediction, period, onPeriodChange, isMarketClosed, stockSymbol = '', currentPrice }: PredictionPanelProps) {
   const isPositive = prediction.changePercent >= 0;
   const currencySymbol = isIndianStock(stockSymbol) ? '₹' : '$';
+  const actualCurrentPrice = currentPrice || prediction.predictedPrice - prediction.priceChange;
+  
+  const chartData = useMemo(() => {
+    return generatePredictionChartData(
+      actualCurrentPrice,
+      prediction.predictedPrice,
+      prediction.lowerBound,
+      prediction.upperBound,
+      period
+    );
+  }, [actualCurrentPrice, prediction, period]);
   
   const formatPrice = (price: number) => {
     return `${currencySymbol}${price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
@@ -46,6 +143,26 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
     if (confidence >= 80) return 'High confidence - Strong signal';
     if (confidence >= 60) return 'Moderate confidence - Proceed with caution';
     return 'Low confidence - High uncertainty';
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+    
+    return (
+      <div className="bg-card border border-border rounded-lg shadow-lg p-3 text-sm">
+        <p className="font-medium text-foreground mb-2">{label}</p>
+        {payload.map((entry: any, idx: number) => {
+          if (entry.value === null) return null;
+          return (
+            <div key={idx} className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+              <span className="text-muted-foreground">{entry.name}:</span>
+              <span className="font-medium">{formatPrice(entry.value)}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -93,6 +210,89 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
         {' '}({periodLabels[period]} forecast)
       </p>
       
+      {/* Prediction Chart with Dotted Forecast Line */}
+      <div className="bg-secondary/50 rounded-lg p-4 mb-6">
+        <ResponsiveContainer width="100%" height={220}>
+          <LineChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis 
+              dataKey="date" 
+              stroke="hsl(var(--muted-foreground))" 
+              fontSize={11}
+              tickLine={false}
+            />
+            <YAxis 
+              stroke="hsl(var(--muted-foreground))" 
+              fontSize={11}
+              tickFormatter={(v) => `${currencySymbol}${v.toLocaleString()}`}
+              domain={['auto', 'auto']}
+              tickLine={false}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+            
+            {/* Upper Bound - dotted area */}
+            <Line
+              type="monotone"
+              dataKey="upperBound"
+              name="Upper Bound"
+              stroke="hsl(var(--chart-up))"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+              connectNulls={false}
+              strokeOpacity={0.5}
+            />
+            
+            {/* Lower Bound - dotted area */}
+            <Line
+              type="monotone"
+              dataKey="lowerBound"
+              name="Lower Bound"
+              stroke="hsl(var(--chart-down))"
+              strokeWidth={1.5}
+              strokeDasharray="4 4"
+              dot={false}
+              connectNulls={false}
+              strokeOpacity={0.5}
+            />
+            
+            {/* Historical Price - solid line */}
+            <Line
+              type="monotone"
+              dataKey="price"
+              name="Historical"
+              stroke="hsl(var(--chart-1))"
+              strokeWidth={2}
+              dot={{ r: 3, fill: 'hsl(var(--chart-1))' }}
+              activeDot={{ r: 5 }}
+              connectNulls={false}
+            />
+            
+            {/* Predicted Price - dotted line */}
+            <Line
+              type="monotone"
+              dataKey="predicted"
+              name="Predicted"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2.5}
+              strokeDasharray="6 4"
+              dot={{ r: 4, fill: 'hsl(var(--primary))', strokeWidth: 2, stroke: 'hsl(var(--background))' }}
+              activeDot={{ r: 6 }}
+              connectNulls={false}
+            />
+            
+            {/* Reference line for today */}
+            <ReferenceLine 
+              x="Today" 
+              stroke="hsl(var(--muted-foreground))" 
+              strokeDasharray="3 3" 
+              label={{ value: 'Now', position: 'top', fill: 'hsl(var(--muted-foreground))', fontSize: 10 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      
       {/* Predicted Price */}
       <div className="bg-secondary rounded-lg p-6 mb-6">
         <p className="text-sm text-muted-foreground mb-2">Predicted Closing Price</p>
@@ -110,7 +310,7 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
       {/* Confidence */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-sm text-muted-foreground">AI Confidence Level</span>
+          <span className="text-sm text-muted-foreground">Confidence Level</span>
           <span className="text-sm font-semibold text-foreground">{prediction.confidence}%</span>
         </div>
         <Progress value={prediction.confidence} className="h-2" />

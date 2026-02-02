@@ -31,15 +31,16 @@ interface CompareChartsProps {
   colors: string[];
 }
 
+// Vibrant chart colors for better visibility
 const CHART_COLORS = [
-  'hsl(var(--chart-1))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-  'hsl(210 80% 60%)',
-  'hsl(280 70% 60%)',
-  'hsl(30 90% 55%)',
+  '#22c55e', // Green
+  '#3b82f6', // Blue  
+  '#f59e0b', // Amber
+  '#ef4444', // Red
+  '#8b5cf6', // Purple
+  '#06b6d4', // Cyan
+  '#ec4899', // Pink
+  '#84cc16', // Lime
 ];
 
 // Calculate volatility as standard deviation of daily returns
