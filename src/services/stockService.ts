@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Stock, TimeSeriesPoint, NewsItem } from "@/types/stock";
+import { getUserApiKeys } from "@/components/ApiKeySettings";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
@@ -103,6 +104,9 @@ export async function fetchStockQuote(symbol: string): Promise<Stock | null> {
   }
 
   try {
+    // Get user API keys if available
+    const userKeys = getUserApiKeys();
+    
     const response = await fetch(`${SUPABASE_URL}/functions/v1/stock-data`, {
       method: 'POST',
       headers: {
@@ -111,6 +115,7 @@ export async function fetchStockQuote(symbol: string): Promise<Stock | null> {
       body: JSON.stringify({
         action: 'quote',
         symbol: symbol,
+        userApiKeys: userKeys,
       }),
     });
 
@@ -206,6 +211,9 @@ export async function fetchTimeSeries(
   outputsize: number = 100
 ): Promise<TimeSeriesPoint[]> {
   try {
+    // Get user API keys if available
+    const userKeys = getUserApiKeys();
+    
     const response = await fetch(`${SUPABASE_URL}/functions/v1/stock-data`, {
       method: 'POST',
       headers: {
@@ -216,6 +224,7 @@ export async function fetchTimeSeries(
         symbol: symbol,
         interval,
         outputsize,
+        userApiKeys: userKeys,
       }),
     });
 

@@ -17,6 +17,7 @@ import { ComparativeChart } from '@/components/ComparativeChart';
 import { StockChatbot } from '@/components/StockChatbot';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ApiKeySettings } from '@/components/ApiKeySettings';
 import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target } from 'lucide-react';
 import { PredictionAccuracy } from '@/components/PredictionAccuracy';
 import { cn } from '@/lib/utils';
@@ -67,7 +68,8 @@ const Index = () => {
                 <p className="text-xs text-muted-foreground">Multimodal AI: EfficientNet B0 + FinBERT Sentiment + LSTM Neural Networks | Currency: ₹ INR</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <ApiKeySettings />
               <MarketStatusIndicator />
             </div>
           </div>
