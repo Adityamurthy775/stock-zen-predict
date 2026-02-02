@@ -63,12 +63,29 @@ serve(async (req) => {
   }
 
   try {
-    const ALPHA_VANTAGE_API_KEY = Deno.env.get('ALPHA_VANTAGE_API_KEY');
-    const FINNHUB_API_KEY = Deno.env.get('FINNHUB_API_KEY');
-    const TWELVE_DATA_API_KEY = Deno.env.get('TWELVE_DATA_API_KEY');
+    // Get API keys from environment (default)
+    let ALPHA_VANTAGE_API_KEY = Deno.env.get('ALPHA_VANTAGE_API_KEY');
+    let FINNHUB_API_KEY = Deno.env.get('FINNHUB_API_KEY');
+    let TWELVE_DATA_API_KEY = Deno.env.get('TWELVE_DATA_API_KEY');
     
-    const { action, symbol, interval, outputsize, symbols } = await req.json();
+    const { action, symbol, interval, outputsize, symbols, userApiKeys } = await req.json();
     console.log(`Stock data request: action=${action}, symbol=${symbol}, interval=${interval}`);
+    
+    // Override with user-provided API keys if available
+    if (userApiKeys) {
+      if (userApiKeys.ALPHA_VANTAGE_API_KEY) {
+        ALPHA_VANTAGE_API_KEY = userApiKeys.ALPHA_VANTAGE_API_KEY;
+        console.log('Using user-provided Alpha Vantage API key');
+      }
+      if (userApiKeys.FINNHUB_API_KEY) {
+        FINNHUB_API_KEY = userApiKeys.FINNHUB_API_KEY;
+        console.log('Using user-provided Finnhub API key');
+      }
+      if (userApiKeys.TWELVE_DATA_API_KEY) {
+        TWELVE_DATA_API_KEY = userApiKeys.TWELVE_DATA_API_KEY;
+        console.log('Using user-provided Twelve Data API key');
+      }
+    }
 
     const ALPHA_VANTAGE_URL = 'https://www.alphavantage.co/query';
     const FINNHUB_URL = 'https://finnhub.io/api/v1';

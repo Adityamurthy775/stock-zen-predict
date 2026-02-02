@@ -26,6 +26,7 @@ import { GitCompareArrows, X, TrendingUp, TrendingDown, Calendar, BarChart3 } fr
 import { cn } from '@/lib/utils';
 import type { Stock, TimeSeriesPoint } from '@/types/stock';
 import { fetchTimeSeries } from '@/services/stockService';
+import { CompareCharts } from '@/components/CompareCharts';
 
 interface ComparativeChartProps {
   stocks: Stock[];
@@ -617,6 +618,14 @@ export function ComparativeChart({ stocks, selectedStock }: ComparativeChartProp
           </CardContent>
         </Card>
       )}
+
+      {/* Additional Analysis Charts */}
+      <CompareCharts 
+        selectedSymbols={selectedSymbols}
+        stocksData={stocksData}
+        stocks={stocks}
+        colors={CHART_COLORS}
+      />
     </div>
   );
 }
