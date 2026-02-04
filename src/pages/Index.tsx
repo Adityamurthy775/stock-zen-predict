@@ -18,7 +18,9 @@ import { StockChatbot } from '@/components/StockChatbot';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiKeySettings } from '@/components/ApiKeySettings';
-import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target } from 'lucide-react';
+import { MarketGlossary } from '@/components/MarketGlossary';
+import { ModelExplanation } from '@/components/ModelExplanation';
+import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target, BookOpen, Cpu } from 'lucide-react';
 import { PredictionAccuracy } from '@/components/PredictionAccuracy';
 import { cn } from '@/lib/utils';
 
@@ -197,6 +199,14 @@ const Index = () => {
                           <Target className="w-4 h-4" />
                           Accuracy
                         </TabsTrigger>
+                        <TabsTrigger value="glossary" className="gap-2">
+                          <BookOpen className="w-4 h-4" />
+                          Learn
+                        </TabsTrigger>
+                        <TabsTrigger value="how-it-works" className="gap-2">
+                          <Cpu className="w-4 h-4" />
+                          How It Works
+                        </TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="chart" className="mt-6 space-y-6">
@@ -259,6 +269,14 @@ const Index = () => {
                           stockSymbol={selectedStock.symbol}
                           currency={selectedStock.currency}
                         />
+                      </TabsContent>
+
+                      <TabsContent value="glossary" className="mt-6">
+                        <MarketGlossary />
+                      </TabsContent>
+
+                      <TabsContent value="how-it-works" className="mt-6">
+                        <ModelExplanation />
                       </TabsContent>
                     </Tabs>
                   </>

@@ -31,16 +31,18 @@ interface CompareChartsProps {
   colors: string[];
 }
 
-// Vibrant chart colors for better visibility
+// Ultra-bright neon chart colors for maximum visibility
 const CHART_COLORS = [
-  '#22c55e', // Green
-  '#3b82f6', // Blue  
-  '#f59e0b', // Amber
-  '#ef4444', // Red
-  '#8b5cf6', // Purple
-  '#06b6d4', // Cyan
-  '#ec4899', // Pink
-  '#84cc16', // Lime
+  '#00FF88', // Neon Green
+  '#00BFFF', // Electric Blue  
+  '#FF6B35', // Bright Orange
+  '#FF3366', // Hot Pink
+  '#9945FF', // Electric Purple
+  '#00FFFF', // Cyan
+  '#FFFF00', // Yellow
+  '#FF1493', // Deep Pink
+  '#39FF14', // Neon Green
+  '#FF4500', // Orange Red
 ];
 
 // Calculate volatility as standard deviation of daily returns

@@ -459,8 +459,9 @@ export const US_STOCKS = [
   'INTC',   // Intel
 ];
 
-// Top 20 Indian Stocks (NSE)
+// Top 50+ Indian Stocks (NSE/BSE)
 export const INDIA_STOCKS = [
+  // Nifty 50
   'RELIANCE',   // Reliance Industries
   'TCS',        // Tata Consultancy Services
   'HDFCBANK',   // HDFC Bank
@@ -481,6 +482,58 @@ export const INDIA_STOCKS = [
   'TITAN',      // Titan Company
   'ULTRACEMCO', // UltraTech Cement
   'BAJFINANCE', // Bajaj Finance
+  // Additional Nifty 50
+  'ADANIENT',   // Adani Enterprises
+  'ADANIPORTS', // Adani Ports
+  'TATAMOTORS', // Tata Motors
+  'TATASTEEL',  // Tata Steel
+  'POWERGRID',  // Power Grid
+  'NTPC',       // NTPC
+  'ONGC',       // ONGC
+  'COALINDIA',  // Coal India
+  'BPCL',       // BPCL
+  'IOC',        // Indian Oil
+  'GRASIM',     // Grasim Industries
+  'TECHM',      // Tech Mahindra
+  'DIVISLAB',   // Divi's Laboratories
+  'DRREDDY',    // Dr. Reddy's
+  'CIPLA',      // Cipla
+  'EICHERMOT',  // Eicher Motors
+  'M&M',        // Mahindra & Mahindra
+  'HEROMOTOCO', // Hero MotoCorp
+  'BAJAJ-AUTO', // Bajaj Auto
+  'BRITANNIA',  // Britannia
+  // Consumer & FMCG
+  'NESTLEIND',  // Nestle India
+  'DABUR',      // Dabur
+  'PIDILITIND', // Pidilite Industries
+  'GODREJCP',   // Godrej Consumer
+  'MARICO',     // Marico
+  'COLPAL',     // Colgate-Palmolive
+  // Consumer Durables
+  'HAVELLS',    // Havells India
+  'VOLTAS',     // Voltas
+  'CROMPTON',   // Crompton Greaves
+  'BLUESTAR',   // Blue Star
+  // Power & Energy
+  'TATAPOWER',  // Tata Power
+  'ADANIGREEN', // Adani Green Energy
+  // Metals
+  'JSWSTEEL',   // JSW Steel
+  'HINDALCO',   // Hindalco
+  'VEDL',       // Vedanta
+  // Oil & Gas
+  'GAIL',       // GAIL India
+  // Banking
+  'INDUSINDBK', // IndusInd Bank
+  'BANDHANBNK', // Bandhan Bank
+  'PNB',        // Punjab National Bank
+  'BANKBARODA', // Bank of Baroda
+  'CANBK',      // Canara Bank
+  // Insurance
+  'SBILIFE',    // SBI Life
+  'HDFCLIFE',   // HDFC Life
+  'ICICIPRULI', // ICICI Prudential
 ];
 
 // Famous Companies (Additional)
