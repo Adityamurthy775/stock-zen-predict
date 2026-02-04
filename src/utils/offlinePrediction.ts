@@ -60,30 +60,48 @@ export function getCachedTimeSeriesData(symbol: string): TimeSeriesPoint[] | nul
   return null;
 }
 
-// Calculate RSI
+// Calculate RSI with Wilder's smoothing for better accuracy
 function calculateRSI(closes: number[], period = 14): number {
   if (closes.length < period + 1) return 50;
   
-  let gains = 0;
-  let losses = 0;
+  let avgGain = 0;
+  let avgLoss = 0;
   
+  // First calculation - simple average
   for (let i = 1; i <= period; i++) {
-    const change = closes[i] - closes[i - 1];
-    if (change > 0) gains += change;
-    else losses -= change;
+    const change = closes[i - 1] - closes[i];
+    if (change > 0) avgGain += change;
+    else avgLoss -= change;
   }
   
-  if (losses === 0) return 100;
-  const rs = gains / losses;
+  avgGain /= period;
+  avgLoss /= period;
+  
+  // Apply Wilder's smoothing for remaining periods
+  for (let i = period + 1; i < Math.min(closes.length, period * 2); i++) {
+    const change = closes[i - 1] - closes[i];
+    if (change > 0) {
+      avgGain = (avgGain * (period - 1) + change) / period;
+      avgLoss = (avgLoss * (period - 1)) / period;
+    } else {
+      avgGain = (avgGain * (period - 1)) / period;
+      avgLoss = (avgLoss * (period - 1) - change) / period;
+    }
+  }
+  
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
   return 100 - (100 / (1 + rs));
 }
 
-// Calculate EMA
+// Calculate EMA with better initialization
 function calculateEMA(data: number[], period: number): number[] {
   if (data.length === 0) return [];
   
   const k = 2 / (period + 1);
-  const result: number[] = [data[0]];
+  // Initialize with SMA for first period
+  const smaFirst = data.slice(0, period).reduce((a, b) => a + b, 0) / Math.min(period, data.length);
+  const result: number[] = [smaFirst];
   
   for (let i = 1; i < data.length; i++) {
     result.push(data[i] * k + result[i - 1] * (1 - k));
@@ -100,9 +118,68 @@ function calculateSMA(data: number[], period: number): number {
   return data.slice(0, period).reduce((a, b) => a + b, 0) / period;
 }
 
-// Calculate Bollinger Band position (0-1, 0 = lower band, 1 = upper band)
-function calculateBollingerPosition(closes: number[], period = 20): number {
-  if (closes.length < period) return 0.5;
+// Calculate Weighted Moving Average (WMA) for better trend detection
+function calculateWMA(data: number[], period: number): number {
+  if (data.length < period) return calculateSMA(data, data.length);
+  
+  let weightedSum = 0;
+  let weightSum = 0;
+  
+  for (let i = 0; i < period; i++) {
+    const weight = period - i;
+    weightedSum += data[i] * weight;
+    weightSum += weight;
+  }
+  
+  return weightedSum / weightSum;
+}
+
+// Calculate VWAP (Volume Weighted Average Price)
+function calculateVWAP(closes: number[], volumes: number[], period: number = 14): number {
+  if (closes.length < period) return closes[0] || 0;
+  
+  let priceVolumeSum = 0;
+  let volumeSum = 0;
+  
+  for (let i = 0; i < period; i++) {
+    priceVolumeSum += closes[i] * (volumes[i] || 1);
+    volumeSum += volumes[i] || 1;
+  }
+  
+  return volumeSum > 0 ? priceVolumeSum / volumeSum : closes[0];
+}
+
+// Calculate Stochastic Oscillator
+function calculateStochastic(closes: number[], highs: number[], lows: number[], period = 14): { k: number; d: number } {
+  if (closes.length < period) return { k: 50, d: 50 };
+  
+  const highestHigh = Math.max(...highs.slice(0, period));
+  const lowestLow = Math.min(...lows.slice(0, period));
+  
+  if (highestHigh === lowestLow) return { k: 50, d: 50 };
+  
+  const k = ((closes[0] - lowestLow) / (highestHigh - lowestLow)) * 100;
+  
+  // Calculate %D (3-period SMA of %K)
+  let d = k;
+  if (closes.length >= period + 2) {
+    const kValues = [];
+    for (let i = 0; i < 3; i++) {
+      const hh = Math.max(...highs.slice(i, i + period));
+      const ll = Math.min(...lows.slice(i, i + period));
+      if (hh !== ll) {
+        kValues.push(((closes[i] - ll) / (hh - ll)) * 100);
+      }
+    }
+    d = kValues.length > 0 ? kValues.reduce((a, b) => a + b, 0) / kValues.length : k;
+  }
+  
+  return { k, d };
+}
+
+// Calculate Bollinger Band position with width
+function calculateBollingerPosition(closes: number[], period = 20): { position: number; width: number } {
+  if (closes.length < period) return { position: 0.5, width: 0 };
   
   const slice = closes.slice(0, period);
   const mean = slice.reduce((a, b) => a + b, 0) / period;
@@ -112,8 +189,10 @@ function calculateBollingerPosition(closes: number[], period = 20): number {
   const upper = mean + 2 * stdDev;
   const lower = mean - 2 * stdDev;
   
-  if (upper === lower) return 0.5;
-  return (closes[0] - lower) / (upper - lower);
+  const width = (upper - lower) / mean; // Normalized width
+  
+  if (upper === lower) return { position: 0.5, width: 0 };
+  return { position: (closes[0] - lower) / (upper - lower), width };
 }
 
 // Generate offline predictions with enhanced trend accuracy
@@ -136,7 +215,8 @@ export function generateOfflinePredictions(
   const macd = ema12.length > 0 && ema26.length > 0 ? ema12[0] - ema26[0] : 0;
   const sma5 = calculateSMA(closes, 5);
   const sma20 = calculateSMA(closes, 20);
-  const bollingerPosition = calculateBollingerPosition(closes);
+  const bollingerData = calculateBollingerPosition(closes);
+  const bollingerPosition = bollingerData.position;
   
   // Calculate momentum (5-day price change percentage)
   const momentum = closes.length >= 5 
