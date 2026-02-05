@@ -54,15 +54,16 @@ const NORMALIZATION_OPTIONS: { value: NormalizationMode; label: string; descript
   { value: 'marketcap', label: 'Market Cap Weighted', description: 'Weighted by market cap' },
 ];
 
+// Ultra-bright neon chart colors for maximum visibility
 const CHART_COLORS = [
-  'hsl(var(--chart-1))',
-  'hsl(var(--chart-2))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--chart-5))',
-  'hsl(210 80% 60%)',
-  'hsl(280 70% 60%)',
-  'hsl(30 90% 55%)',
+  '#00FF88', // Neon Green
+  '#00BFFF', // Electric Blue
+  '#FF6B35', // Bright Orange
+  '#FF3366', // Hot Pink
+  '#9945FF', // Electric Purple
+  '#00FFFF', // Cyan
+  '#FFFF00', // Yellow
+  '#FF1493', // Deep Pink
 ];
 
 // Helper to detect currency based on stock exchange

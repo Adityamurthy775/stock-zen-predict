@@ -12,7 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Settings, Key, ExternalLink, Check, X, AlertTriangle } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { Settings, Key, ExternalLink, Check, X, AlertTriangle, RefreshCw, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface ApiKey {
@@ -24,23 +25,36 @@ interface ApiKey {
   isSet: boolean;
 }
 
+interface ApiUsage {
+  used: number;
+  limit: number;
+  remaining: number;
+  resetIn: number;
+}
+
+interface ApiUsageData {
+  alpha_vantage: ApiUsage;
+  twelve_data: ApiUsage;
+  finnhub: ApiUsage;
+}
+
 const API_KEY_CONFIG: Omit<ApiKey, 'key' | 'isSet'>[] = [
-  {
-    name: 'Twelve Data',
-    envName: 'TWELVE_DATA_API_KEY',
-    description: 'Primary data provider for stock quotes and time series',
-    signupUrl: 'https://twelvedata.com/account/api-keys',
-  },
   {
     name: 'Alpha Vantage',
     envName: 'ALPHA_VANTAGE_API_KEY',
-    description: 'Fallback provider for stock data',
+    description: 'Primary data provider for stock quotes (25 calls/day free)',
     signupUrl: 'https://www.alphavantage.co/support/#api-key',
+  },
+  {
+    name: 'Twelve Data',
+    envName: 'TWELVE_DATA_API_KEY',
+    description: 'Fallback provider for stock data (800 calls/day free)',
+    signupUrl: 'https://twelvedata.com/account/api-keys',
   },
   {
     name: 'Finnhub',
     envName: 'FINNHUB_API_KEY',
-    description: 'News and market data provider',
+    description: 'News and market data provider (60 calls/min free)',
     signupUrl: 'https://finnhub.io/register',
   },
 ];
@@ -52,6 +66,36 @@ export function ApiKeySettings() {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
   const [tempKeys, setTempKeys] = useState<Record<string, string>>({});
   const [showSuccess, setShowSuccess] = useState(false);
+  const [apiUsage, setApiUsage] = useState<ApiUsageData | null>(null);
+  const [loadingUsage, setLoadingUsage] = useState(false);
+
+  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+
+  // Fetch API usage when dialog opens
+  const fetchApiUsage = async () => {
+    setLoadingUsage(true);
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/stock-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'api_usage' }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setApiUsage(data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch API usage:', error);
+    } finally {
+      setLoadingUsage(false);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      fetchApiUsage();
+    }
+  }, [open]);
 
   // Load saved API keys on mount
   useEffect(() => {
@@ -134,14 +178,92 @@ export function ApiKeySettings() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+          {/* API Usage Stats */}
+          <div className="space-y-3 p-3 rounded-lg bg-secondary/50 border border-border">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" />
+                <span className="text-sm font-medium">API Usage (This Session)</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={fetchApiUsage}
+                disabled={loadingUsage}
+                className="h-7 px-2"
+              >
+                <RefreshCw className={cn("w-3.5 h-3.5", loadingUsage && "animate-spin")} />
+              </Button>
+            </div>
+            
+            {apiUsage ? (
+              <div className="space-y-3">
+                {/* Alpha Vantage */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Alpha Vantage (Primary)</span>
+                    <span className={cn(
+                      "font-medium",
+                      apiUsage.alpha_vantage.remaining < 5 ? "text-destructive" : "text-foreground"
+                    )}>
+                      {apiUsage.alpha_vantage.remaining}/{apiUsage.alpha_vantage.limit} remaining
+                    </span>
+                  </div>
+                  <Progress 
+                    value={(apiUsage.alpha_vantage.remaining / apiUsage.alpha_vantage.limit) * 100} 
+                    className="h-1.5"
+                  />
+                </div>
+                
+                {/* Twelve Data */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Twelve Data (Fallback)</span>
+                    <span className={cn(
+                      "font-medium",
+                      apiUsage.twelve_data.remaining < 50 ? "text-destructive" : "text-foreground"
+                    )}>
+                      {apiUsage.twelve_data.remaining}/{apiUsage.twelve_data.limit} remaining
+                    </span>
+                  </div>
+                  <Progress 
+                    value={(apiUsage.twelve_data.remaining / apiUsage.twelve_data.limit) * 100} 
+                    className="h-1.5"
+                  />
+                </div>
+                
+                {/* Finnhub */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Finnhub (News)</span>
+                    <span className={cn(
+                      "font-medium",
+                      apiUsage.finnhub.remaining < 10 ? "text-destructive" : "text-foreground"
+                    )}>
+                      {apiUsage.finnhub.remaining}/{apiUsage.finnhub.limit} remaining
+                    </span>
+                  </div>
+                  <Progress 
+                    value={(apiUsage.finnhub.remaining / apiUsage.finnhub.limit) * 100} 
+                    className="h-1.5"
+                  />
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {loadingUsage ? 'Loading usage stats...' : 'Usage stats unavailable'}
+              </p>
+            )}
+          </div>
+
           {/* Rate Limit Warning */}
           <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="text-sm">
               <p className="font-medium text-amber-500">Rate Limit Reached?</p>
               <p className="text-muted-foreground mt-1">
-                Free tier API keys have request limits. Add your own keys below for unlimited access.
+                Add your own API keys below for higher limits. Keys are saved locally and sent directly to the backend.
               </p>
             </div>
           </div>
