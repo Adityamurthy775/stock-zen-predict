@@ -61,6 +61,24 @@ const API_KEY_CONFIG: Omit<ApiKey, 'key' | 'isSet'>[] = [
 
 const LOCAL_STORAGE_KEY = 'user_api_keys';
 
+// Helper function to format reset time
+const formatResetTime = (seconds: number): string => {
+  if (seconds <= 0) return 'Now';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) {
+    const mins = Math.floor(seconds / 60);
+    return `${mins}m`;
+  }
+  const hours = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    const remainingHours = hours % 24;
+    return remainingHours > 0 ? `${days}d ${remainingHours}h` : `${days}d`;
+  }
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+};
+
 export function ApiKeySettings() {
   const [open, setOpen] = useState(false);
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
@@ -214,6 +232,9 @@ export function ApiKeySettings() {
                     value={(apiUsage.alpha_vantage.remaining / apiUsage.alpha_vantage.limit) * 100} 
                     className="h-1.5"
                   />
+                  <div className="text-[10px] text-muted-foreground">
+                    Resets in: {formatResetTime(apiUsage.alpha_vantage.resetIn)}
+                  </div>
                 </div>
                 
                 {/* Twelve Data */}
@@ -231,6 +252,9 @@ export function ApiKeySettings() {
                     value={(apiUsage.twelve_data.remaining / apiUsage.twelve_data.limit) * 100} 
                     className="h-1.5"
                   />
+                  <div className="text-[10px] text-muted-foreground">
+                    Resets in: {formatResetTime(apiUsage.twelve_data.resetIn)}
+                  </div>
                 </div>
                 
                 {/* Finnhub */}
@@ -248,6 +272,9 @@ export function ApiKeySettings() {
                     value={(apiUsage.finnhub.remaining / apiUsage.finnhub.limit) * 100} 
                     className="h-1.5"
                   />
+                  <div className="text-[10px] text-muted-foreground">
+                    Resets in: {formatResetTime(apiUsage.finnhub.resetIn)}
+                  </div>
                 </div>
               </div>
             ) : (
