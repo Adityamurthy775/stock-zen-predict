@@ -264,8 +264,8 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
               name="Historical"
               stroke="hsl(var(--chart-1))"
               strokeWidth={2}
-              dot={{ r: 3, fill: 'hsl(var(--chart-1))' }}
-              activeDot={{ r: 5 }}
+              dot={{ r: 3, fill: 'white', stroke: 'hsl(var(--chart-1))', strokeWidth: 1 }}
+              activeDot={{ r: 5, fill: 'white', stroke: 'hsl(var(--chart-1))' }}
               connectNulls={false}
             />
             
@@ -277,8 +277,8 @@ export function PredictionPanel({ prediction, period, onPeriodChange, isMarketCl
               stroke="hsl(var(--primary))"
               strokeWidth={2.5}
               strokeDasharray="6 4"
-              dot={{ r: 4, fill: 'hsl(var(--primary))', strokeWidth: 2, stroke: 'hsl(var(--background))' }}
-              activeDot={{ r: 6 }}
+              dot={{ r: 4, fill: 'white', stroke: 'hsl(var(--primary))', strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: 'white', stroke: 'hsl(var(--primary))' }}
               connectNulls={false}
             />
             
