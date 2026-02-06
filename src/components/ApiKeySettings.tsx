@@ -32,10 +32,19 @@ interface ApiUsage {
   resetIn: number;
 }
 
+interface ScrapingStats {
+  calls: number;
+  successes: number;
+  failures: number;
+  lastUsed: string | null;
+  status: string;
+}
+
 interface ApiUsageData {
   alpha_vantage: ApiUsage;
   twelve_data: ApiUsage;
   finnhub: ApiUsage;
+  scraping?: ScrapingStats;
 }
 
 const API_KEY_CONFIG: Omit<ApiKey, 'key' | 'isSet'>[] = [
@@ -276,6 +285,36 @@ export function ApiKeySettings() {
                     Resets in: {formatResetTime(apiUsage.finnhub.resetIn)}
                   </div>
                 </div>
+                
+                {/* Yahoo Finance Scraping (Fallback) */}
+                {apiUsage.scraping && (
+                  <div className="space-y-1 pt-2 border-t border-border">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Yahoo Finance Scraping (Auto-Fallback)</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/50 text-primary">
+                        Unlimited
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>
+                        Calls: {apiUsage.scraping.calls} 
+                        {apiUsage.scraping.calls > 0 && (
+                          <span className="ml-1">
+                            (✓ {apiUsage.scraping.successes} / ✗ {apiUsage.scraping.failures})
+                          </span>
+                        )}
+                      </span>
+                      <span>
+                        {apiUsage.scraping.lastUsed 
+                          ? `Last used: ${new Date(apiUsage.scraping.lastUsed).toLocaleTimeString()}`
+                          : 'Not used yet'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/70">
+                      Automatically activates when API limits are reached. No key required.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
@@ -284,7 +323,16 @@ export function ApiKeySettings() {
             )}
           </div>
 
-          {/* Rate Limit Warning */}
+          {/* Rate Limit Info */}
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <Activity className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-primary">Auto-Scraping Enabled</p>
+              <p className="text-muted-foreground mt-1">
+                When API limits are reached, stock prices are automatically scraped from Yahoo Finance — no extra keys needed.
+              </p>
+            </div>
+          </div>
           <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="text-sm">
