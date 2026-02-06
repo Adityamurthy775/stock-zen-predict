@@ -13,12 +13,15 @@ const quoteCache = new Map<string, CachedQuote>();
 // API usage tracking (in-memory, resets on function restart)
 const apiUsageTracker = new Map<string, { calls: number; lastReset: number }>();
 
+// Scraping stats tracker
+const scrapingStats = { calls: 0, successes: 0, failures: 0, lastUsed: 0 };
+
 // US stocks list for currency detection
 const US_STOCKS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'KO', 
                    'WMT', 'JNJ', 'PG', 'UNH', 'HD', 'MA', 'DIS', 'NFLX', 'PYPL', 'INTC',
                    'CSCO', 'PEP', 'ADBE', 'CRM', 'NKE', 'CMCSA', 'VZ', 'T', 'BA', 'XOM'];
 
-// Extended Indian stocks list - 50+ stocks
+// Extended Indian stocks list
 const INDIA_STOCKS = [
   'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'HINDUNILVR', 'SBIN', 
   'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT', 'AXISBANK', 'WIPRO', 'ASIANPAINT', 
@@ -84,6 +87,20 @@ const trackApiUsage = (apiName: string) => {
   return usage;
 };
 
+// Check if API limit is likely exceeded
+const isApiLimitExceeded = (apiName: string): boolean => {
+  const usage = apiUsageTracker.get(apiName);
+  if (!usage) return false;
+  
+  const limits: Record<string, number> = {
+    'alpha_vantage': 25,
+    'twelve_data': 800,
+    'finnhub': 60,
+  };
+  
+  return usage.calls >= (limits[apiName] || Infinity);
+};
+
 // Get remaining API calls (estimated)
 const getApiLimits = () => {
   const alphaVantage = apiUsageTracker.get('alpha_vantage') || { calls: 0, lastReset: Date.now() };
@@ -93,24 +110,201 @@ const getApiLimits = () => {
   return {
     alpha_vantage: {
       used: alphaVantage.calls,
-      limit: 25, // Free tier: 25 calls/day (5 per minute)
+      limit: 25,
       remaining: Math.max(0, 25 - alphaVantage.calls),
       resetIn: Math.max(0, Math.ceil((alphaVantage.lastReset + 3600000 - Date.now()) / 60000)),
     },
     twelve_data: {
       used: twelveData.calls,
-      limit: 800, // Free tier: 800 calls/day
+      limit: 800,
       remaining: Math.max(0, 800 - twelveData.calls),
       resetIn: Math.max(0, Math.ceil((twelveData.lastReset + 3600000 - Date.now()) / 60000)),
     },
     finnhub: {
       used: finnhub.calls,
-      limit: 60, // Free tier: 60 calls/minute
+      limit: 60,
       remaining: Math.max(0, 60 - finnhub.calls),
       resetIn: Math.max(0, Math.ceil((finnhub.lastReset + 60000 - Date.now()) / 1000)),
     },
+    scraping: {
+      calls: scrapingStats.calls,
+      successes: scrapingStats.successes,
+      failures: scrapingStats.failures,
+      lastUsed: scrapingStats.lastUsed ? new Date(scrapingStats.lastUsed).toISOString() : null,
+      status: 'unlimited',
+    },
   };
 };
+
+// ============ YAHOO FINANCE WEB SCRAPING FALLBACK ============
+
+// Format symbol for Yahoo Finance
+const formatSymbolForYahoo = (sym: string): string => {
+  const { baseSymbol, isIndian } = normalizeSymbol(sym);
+  if (isIndian) {
+    return `${baseSymbol}.NS`; // Yahoo uses .NS for NSE
+  }
+  return baseSymbol;
+};
+
+// Scrape stock quote from Yahoo Finance
+const scrapeYahooQuote = async (symbol: string): Promise<any> => {
+  const yahooSymbol = formatSymbolForYahoo(symbol);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&range=5d`;
+  
+  console.log(`[SCRAPING] Fetching quote from Yahoo Finance for ${yahooSymbol}`);
+  scrapingStats.calls++;
+  scrapingStats.lastUsed = Date.now();
+  
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      console.error(`[SCRAPING] Yahoo Finance HTTP error: ${response.status}`);
+      scrapingStats.failures++;
+      return null;
+    }
+    
+    const data = await response.json();
+    const result = data?.chart?.result?.[0];
+    
+    if (!result) {
+      console.error('[SCRAPING] Yahoo Finance: No result data');
+      scrapingStats.failures++;
+      return null;
+    }
+    
+    const meta = result.meta;
+    const quotes = result.indicators?.quote?.[0];
+    const timestamps = result.timestamp;
+    
+    if (!meta || !quotes || !timestamps || timestamps.length === 0) {
+      console.error('[SCRAPING] Yahoo Finance: Incomplete data');
+      scrapingStats.failures++;
+      return null;
+    }
+    
+    // Get latest data point
+    const lastIdx = timestamps.length - 1;
+    const price = meta.regularMarketPrice || quotes.close?.[lastIdx] || 0;
+    const previousClose = meta.previousClose || meta.chartPreviousClose || 0;
+    const change = price - previousClose;
+    const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
+    
+    const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+    const currency = meta.currency || (isIndianStock(baseSym) ? 'INR' : 'USD');
+    
+    const transformedQuote = {
+      symbol: baseSym,
+      name: meta.shortName || meta.longName || baseSym,
+      exchange: meta.exchangeName || (isIndianStock(baseSym) ? 'NSE' : 'NYSE'),
+      currency: currency,
+      datetime: new Date(timestamps[lastIdx] * 1000).toISOString(),
+      open: quotes.open?.[lastIdx] || 0,
+      high: quotes.high?.[lastIdx] || 0,
+      low: quotes.low?.[lastIdx] || 0,
+      close: price,
+      volume: quotes.volume?.[lastIdx] || 0,
+      previous_close: previousClose,
+      change: parseFloat(change.toFixed(2)),
+      percent_change: parseFloat(changePercent.toFixed(2)),
+      is_market_open: meta.regularMarketTime ? (Date.now() / 1000 - meta.regularMarketTime < 300) : false,
+      source: 'yahoo_scraping',
+    };
+    
+    console.log(`[SCRAPING] Yahoo Finance quote success: ${baseSym} = ${price} ${currency}`);
+    scrapingStats.successes++;
+    return transformedQuote;
+  } catch (err) {
+    console.error('[SCRAPING] Yahoo Finance fetch error:', err);
+    scrapingStats.failures++;
+    return null;
+  }
+};
+
+// Scrape time series from Yahoo Finance
+const scrapeYahooTimeSeries = async (symbol: string, outputsize: number = 60): Promise<any> => {
+  const yahooSymbol = formatSymbolForYahoo(symbol);
+  // Get enough days of data
+  const range = outputsize > 100 ? '1y' : outputsize > 30 ? '6mo' : '3mo';
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSymbol)}?interval=1d&range=${range}`;
+  
+  console.log(`[SCRAPING] Fetching time series from Yahoo Finance for ${yahooSymbol}, range=${range}`);
+  scrapingStats.calls++;
+  scrapingStats.lastUsed = Date.now();
+  
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      console.error(`[SCRAPING] Yahoo Finance time series HTTP error: ${response.status}`);
+      scrapingStats.failures++;
+      return null;
+    }
+    
+    const data = await response.json();
+    const result = data?.chart?.result?.[0];
+    
+    if (!result) {
+      console.error('[SCRAPING] Yahoo Finance time series: No result data');
+      scrapingStats.failures++;
+      return null;
+    }
+    
+    const quotes = result.indicators?.quote?.[0];
+    const timestamps = result.timestamp;
+    
+    if (!quotes || !timestamps) {
+      console.error('[SCRAPING] Yahoo Finance time series: Incomplete data');
+      scrapingStats.failures++;
+      return null;
+    }
+    
+    const values = [];
+    for (let i = 0; i < timestamps.length && values.length < outputsize; i++) {
+      const open = quotes.open?.[i];
+      const high = quotes.high?.[i];
+      const low = quotes.low?.[i];
+      const close = quotes.close?.[i];
+      const volume = quotes.volume?.[i];
+      
+      // Skip null/invalid entries
+      if (open == null || high == null || low == null || close == null) continue;
+      
+      values.push({
+        datetime: new Date(timestamps[i] * 1000).toISOString().split('T')[0],
+        open: parseFloat(open.toFixed(2)),
+        high: parseFloat(high.toFixed(2)),
+        low: parseFloat(low.toFixed(2)),
+        close: parseFloat(close.toFixed(2)),
+        volume: volume?.toString() || '0',
+      });
+    }
+    
+    // Yahoo returns oldest first, reverse for newest first
+    values.reverse();
+    
+    console.log(`[SCRAPING] Yahoo Finance time series success: ${values.length} data points`);
+    scrapingStats.successes++;
+    return { values, source: 'yahoo_scraping' };
+  } catch (err) {
+    console.error('[SCRAPING] Yahoo Finance time series error:', err);
+    scrapingStats.failures++;
+    return null;
+  }
+};
+
+// ============ MAIN SERVER ============
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -162,10 +356,17 @@ serve(async (req) => {
     };
 
     if (action === 'quote') {
-      if (!ALPHA_VANTAGE_API_KEY) {
-        console.error('Alpha Vantage API key not configured');
+      if (!ALPHA_VANTAGE_API_KEY && !TWELVE_DATA_API_KEY) {
+        // No API keys at all — go straight to scraping
+        console.log('[QUOTE] No API keys configured, using Yahoo Finance scraping');
+        const scraped = await scrapeYahooQuote(symbol);
+        if (scraped) {
+          return new Response(JSON.stringify(scraped), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
         return new Response(
-          JSON.stringify({ error: 'Alpha Vantage API key not configured' }),
+          JSON.stringify({ error: 'No API keys configured and scraping failed' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -186,55 +387,64 @@ serve(async (req) => {
         });
       };
 
-      // PRIMARY: Alpha Vantage (better for Indian stocks)
-      const formattedSymbol = formatSymbolForAlphaVantage(symbol);
-      const url = `${ALPHA_VANTAGE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(formattedSymbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`;
-      console.log(`Fetching quote from Alpha Vantage (PRIMARY) for ${formattedSymbol}`);
+      // PRIMARY: Alpha Vantage (skip if limit exceeded)
+      if (ALPHA_VANTAGE_API_KEY && !isApiLimitExceeded('alpha_vantage')) {
+        const formattedSymbol = formatSymbolForAlphaVantage(symbol);
+        const url = `${ALPHA_VANTAGE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(formattedSymbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`;
+        console.log(`Fetching quote from Alpha Vantage (PRIMARY) for ${formattedSymbol}`);
 
-      try {
-        trackApiUsage('alpha_vantage');
-        const response = await fetch(url);
-        const data = await response.json();
-        console.log('Alpha Vantage response:', JSON.stringify(data).substring(0, 500));
+        try {
+          trackApiUsage('alpha_vantage');
+          const response = await fetch(url);
+          const data = await response.json();
+          console.log('Alpha Vantage response:', JSON.stringify(data).substring(0, 500));
 
-        if (data['Global Quote'] && Object.keys(data['Global Quote']).length > 0) {
-          const quote = data['Global Quote'];
-          
-          const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
-          const currency = isIndianStock(baseSym) ? 'INR' : 'USD';
+          // Check for rate limit message
+          if (data['Note'] || data['Information']?.includes('rate limit')) {
+            console.warn('Alpha Vantage rate limit hit, marking as exceeded');
+            const usage = apiUsageTracker.get('alpha_vantage');
+            if (usage) usage.calls = 25; // Mark as exceeded
+          } else if (data['Global Quote'] && Object.keys(data['Global Quote']).length > 0) {
+            const quote = data['Global Quote'];
+            
+            const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+            const currency = isIndianStock(baseSym) ? 'INR' : 'USD';
 
-          const price = parseFloat(quote['05. price']) || 0;
-          const previousClose = parseFloat(quote['08. previous close']) || 0;
-          const change = parseFloat(quote['09. change']) || 0;
-          const changePercent = parseFloat(quote['10. change percent']?.replace('%', '')) || 0;
+            const price = parseFloat(quote['05. price']) || 0;
+            const previousClose = parseFloat(quote['08. previous close']) || 0;
+            const change = parseFloat(quote['09. change']) || 0;
+            const changePercent = parseFloat(quote['10. change percent']?.replace('%', '')) || 0;
 
-          const transformedQuote = {
-            symbol: quote['01. symbol']?.replace('.BSE', '').replace('.NSE', '') || symbol,
-            name: quote['01. symbol']?.replace('.BSE', '').replace('.NSE', '') || symbol,
-            exchange: isIndianStock(baseSym) ? 'NSE' : 'NYSE',
-            currency: currency,
-            datetime: quote['07. latest trading day'] || new Date().toISOString(),
-            open: parseFloat(quote['02. open']) || 0,
-            high: parseFloat(quote['03. high']) || 0,
-            low: parseFloat(quote['04. low']) || 0,
-            close: price,
-            volume: parseInt(quote['06. volume']) || 0,
-            previous_close: previousClose,
-            change: change,
-            percent_change: changePercent,
-            is_market_open: true,
-          };
+            const transformedQuote = {
+              symbol: quote['01. symbol']?.replace('.BSE', '').replace('.NSE', '') || symbol,
+              name: quote['01. symbol']?.replace('.BSE', '').replace('.NSE', '') || symbol,
+              exchange: isIndianStock(baseSym) ? 'NSE' : 'NYSE',
+              currency: currency,
+              datetime: quote['07. latest trading day'] || new Date().toISOString(),
+              open: parseFloat(quote['02. open']) || 0,
+              high: parseFloat(quote['03. high']) || 0,
+              low: parseFloat(quote['04. low']) || 0,
+              close: price,
+              volume: parseInt(quote['06. volume']) || 0,
+              previous_close: previousClose,
+              change: change,
+              percent_change: changePercent,
+              is_market_open: true,
+            };
 
-          return cacheAndReturn(transformedQuote);
+            return cacheAndReturn(transformedQuote);
+          }
+
+          console.error('Alpha Vantage empty or error:', data['Note'] || data['Error Message'] || 'No data');
+        } catch (err) {
+          console.error('Alpha Vantage fetch error:', err);
         }
-
-        console.error('Alpha Vantage empty or error:', data['Note'] || data['Error Message'] || 'No data');
-      } catch (err) {
-        console.error('Alpha Vantage fetch error:', err);
+      } else if (isApiLimitExceeded('alpha_vantage')) {
+        console.log('[QUOTE] Alpha Vantage limit exceeded, skipping');
       }
 
-      // FALLBACK: Twelve Data
-      if (TWELVE_DATA_API_KEY) {
+      // FALLBACK 1: Twelve Data (skip if limit exceeded)
+      if (TWELVE_DATA_API_KEY && !isApiLimitExceeded('twelve_data')) {
         try {
           trackApiUsage('twelve_data');
           const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
@@ -264,65 +474,103 @@ serve(async (req) => {
             };
             return cacheAndReturn(transformedQuote);
           }
+          
+          // Check for rate limit
+          if (data?.code === 429 || data?.message?.includes('limit')) {
+            console.warn('Twelve Data rate limit hit');
+            const usage = apiUsageTracker.get('twelve_data');
+            if (usage) usage.calls = 800;
+          }
+          
           console.error('Twelve Data quote error:', data?.message || data?.code || 'Unknown error');
         } catch (err) {
           console.error('Twelve Data fetch error:', err);
         }
+      } else if (isApiLimitExceeded('twelve_data')) {
+        console.log('[QUOTE] Twelve Data limit exceeded, skipping');
       }
 
-      return cacheAndReturn({ error: 'Failed to fetch quote' });
+      // FALLBACK 2: Yahoo Finance Web Scraping (no limit!)
+      console.log('[QUOTE] All APIs exhausted or failed, falling back to Yahoo Finance scraping');
+      const scraped = await scrapeYahooQuote(symbol);
+      if (scraped) {
+        return cacheAndReturn(scraped);
+      }
+
+      return cacheAndReturn({ error: 'All data sources failed (APIs + scraping)' });
     }
 
     if (action === 'batch_quote') {
       const symbolList = symbols || symbol;
-      
-      if (!ALPHA_VANTAGE_API_KEY) {
-        return new Response(
-          JSON.stringify({ error: 'Batch quotes unavailable (API key missing)' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       const requested = symbolList.split(',').map((s: string) => s.trim()).filter(Boolean);
-      console.log(`Fetching batch quotes from Alpha Vantage for ${requested.length} symbols`);
+      console.log(`Fetching batch quotes for ${requested.length} symbols`);
 
       const results: any[] = [];
       
-      for (const sym of requested.slice(0, 5)) {
-        trackApiUsage('alpha_vantage');
-        const formattedSymbol = formatSymbolForAlphaVantage(sym);
-        const url = `${ALPHA_VANTAGE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(formattedSymbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`;
-        
-        try {
-          const response = await fetch(url);
-          const data = await response.json();
-
-          if (data['Global Quote'] && Object.keys(data['Global Quote']).length > 0) {
-            const quote = data['Global Quote'];
-            const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
-            const currency = isIndianStock(baseSym) ? 'INR' : 'USD';
-
-            results.push({
-              symbol: baseSym,
-              name: baseSym,
-              exchange: isIndianStock(baseSym) ? 'NSE' : 'NYSE',
-              currency: currency,
-              datetime: quote['07. latest trading day'] || new Date().toISOString(),
-              open: parseFloat(quote['02. open']) || 0,
-              high: parseFloat(quote['03. high']) || 0,
-              low: parseFloat(quote['04. low']) || 0,
-              close: parseFloat(quote['05. price']) || 0,
-              volume: parseInt(quote['06. volume']) || 0,
-              previous_close: parseFloat(quote['08. previous close']) || 0,
-              change: parseFloat(quote['09. change']) || 0,
-              percent_change: parseFloat(quote['10. change percent']?.replace('%', '')) || 0,
-              is_market_open: true,
-            });
-          }
+      // Try Alpha Vantage first if available
+      if (ALPHA_VANTAGE_API_KEY && !isApiLimitExceeded('alpha_vantage')) {
+        for (const sym of requested.slice(0, 5)) {
+          trackApiUsage('alpha_vantage');
+          const formattedSymbol = formatSymbolForAlphaVantage(sym);
+          const url = `${ALPHA_VANTAGE_URL}?function=GLOBAL_QUOTE&symbol=${encodeURIComponent(formattedSymbol)}&apikey=${ALPHA_VANTAGE_API_KEY}`;
           
-          await new Promise(resolve => setTimeout(resolve, 200));
-        } catch (err) {
-          console.error(`Error fetching quote for ${sym}:`, err);
+          try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            if (data['Note'] || data['Information']?.includes('rate limit')) {
+              console.warn('Alpha Vantage rate limit hit during batch');
+              const usage = apiUsageTracker.get('alpha_vantage');
+              if (usage) usage.calls = 25;
+              break; // Stop trying Alpha Vantage
+            }
+
+            if (data['Global Quote'] && Object.keys(data['Global Quote']).length > 0) {
+              const quote = data['Global Quote'];
+              const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
+              const currency = isIndianStock(baseSym) ? 'INR' : 'USD';
+
+              results.push({
+                symbol: baseSym,
+                name: baseSym,
+                exchange: isIndianStock(baseSym) ? 'NSE' : 'NYSE',
+                currency: currency,
+                datetime: quote['07. latest trading day'] || new Date().toISOString(),
+                open: parseFloat(quote['02. open']) || 0,
+                high: parseFloat(quote['03. high']) || 0,
+                low: parseFloat(quote['04. low']) || 0,
+                close: parseFloat(quote['05. price']) || 0,
+                volume: parseInt(quote['06. volume']) || 0,
+                previous_close: parseFloat(quote['08. previous close']) || 0,
+                change: parseFloat(quote['09. change']) || 0,
+                percent_change: parseFloat(quote['10. change percent']?.replace('%', '')) || 0,
+                is_market_open: true,
+              });
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, 200));
+          } catch (err) {
+            console.error(`Error fetching quote for ${sym}:`, err);
+          }
+        }
+      }
+
+      // For any remaining symbols not fetched, use Yahoo Finance scraping
+      const fetchedSymbols = new Set(results.map(r => r.symbol.toUpperCase()));
+      const remaining = requested.filter(sym => {
+        const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '').toUpperCase();
+        return !fetchedSymbols.has(baseSym);
+      });
+
+      if (remaining.length > 0) {
+        console.log(`[BATCH] Scraping ${remaining.length} remaining symbols from Yahoo Finance`);
+        for (const sym of remaining) {
+          const scraped = await scrapeYahooQuote(sym);
+          if (scraped) {
+            results.push(scraped);
+          }
+          // Small delay to be polite
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
@@ -335,8 +583,8 @@ serve(async (req) => {
       const size = outputsize || 100;
       const int = interval || '1day';
       
-      // PRIMARY: Alpha Vantage for time series
-      if (ALPHA_VANTAGE_API_KEY) {
+      // PRIMARY: Alpha Vantage for time series (skip if limit exceeded)
+      if (ALPHA_VANTAGE_API_KEY && !isApiLimitExceeded('alpha_vantage')) {
         trackApiUsage('alpha_vantage');
         const formattedSymbol = formatSymbolForAlphaVantage(symbol);
         
@@ -360,32 +608,41 @@ serve(async (req) => {
           const response = await fetch(url);
           const data = await response.json();
 
-          const timeSeriesKey = Object.keys(data).find(key => key.includes('Time Series'));
-          
-          if (timeSeriesKey && data[timeSeriesKey]) {
-            const timeSeries = data[timeSeriesKey];
-            const values = Object.entries(timeSeries).slice(0, size).map(([datetime, values]: [string, any]) => ({
-              datetime,
-              open: values['1. open'],
-              high: values['2. high'],
-              low: values['3. low'],
-              close: values['4. close'],
-              volume: values['5. volume'] || values['6. volume'] || '0',
-            }));
+          // Check for rate limit
+          if (data['Note'] || data['Information']?.includes('rate limit')) {
+            console.warn('Alpha Vantage rate limit hit on time_series');
+            const usage = apiUsageTracker.get('alpha_vantage');
+            if (usage) usage.calls = 25;
+          } else {
+            const timeSeriesKey = Object.keys(data).find(key => key.includes('Time Series'));
+            
+            if (timeSeriesKey && data[timeSeriesKey]) {
+              const timeSeries = data[timeSeriesKey];
+              const values = Object.entries(timeSeries).slice(0, size).map(([datetime, values]: [string, any]) => ({
+                datetime,
+                open: values['1. open'],
+                high: values['2. high'],
+                low: values['3. low'],
+                close: values['4. close'],
+                volume: values['5. volume'] || values['6. volume'] || '0',
+              }));
 
-            return new Response(JSON.stringify({ values }), {
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
+              return new Response(JSON.stringify({ values }), {
+                headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+              });
+            }
           }
 
           console.error('Alpha Vantage time series error:', data['Note'] || data['Error Message'] || 'No data');
         } catch (err) {
           console.error('Alpha Vantage time series error:', err);
         }
+      } else if (isApiLimitExceeded('alpha_vantage')) {
+        console.log('[TIME_SERIES] Alpha Vantage limit exceeded, skipping');
       }
 
-      // FALLBACK: Twelve Data
-      if (TWELVE_DATA_API_KEY) {
+      // FALLBACK 1: Twelve Data (skip if limit exceeded)
+      if (TWELVE_DATA_API_KEY && !isApiLimitExceeded('twelve_data')) {
         try {
           trackApiUsage('twelve_data');
           const baseSym = symbol.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '');
@@ -408,14 +665,32 @@ serve(async (req) => {
               headers: { ...corsHeaders, 'Content-Type': 'application/json' },
             });
           }
+          
+          if (data?.code === 429 || data?.message?.includes('limit')) {
+            console.warn('Twelve Data rate limit on time_series');
+            const usage = apiUsageTracker.get('twelve_data');
+            if (usage) usage.calls = 800;
+          }
+          
           console.error('Twelve Data time series error:', data?.message || 'No data');
         } catch (err) {
           console.error('Twelve Data time series fetch error:', err);
         }
+      } else if (isApiLimitExceeded('twelve_data')) {
+        console.log('[TIME_SERIES] Twelve Data limit exceeded, skipping');
+      }
+
+      // FALLBACK 2: Yahoo Finance Web Scraping
+      console.log('[TIME_SERIES] All APIs exhausted, falling back to Yahoo Finance scraping');
+      const scraped = await scrapeYahooTimeSeries(symbol, size);
+      if (scraped) {
+        return new Response(JSON.stringify(scraped), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       return new Response(
-        JSON.stringify({ error: 'Failed to fetch time series' }),
+        JSON.stringify({ error: 'All data sources failed for time series (APIs + scraping)' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
