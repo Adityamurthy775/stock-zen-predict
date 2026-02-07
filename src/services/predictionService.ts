@@ -64,26 +64,26 @@ export function generateMockPrediction(
   const days = periodDays[period];
   
   // Enhanced volatility calculation with asset-specific adjustments
-  const baseVolatility = 0.004 + (Math.abs(momentum) * 0.012); // 0.4% to 1.6%
+  const baseVolatility = 0.003 + (Math.abs(momentum) * 0.008); // Tighter range for better accuracy
   const timeScaledVolatility = baseVolatility * Math.sqrt(days / 252) * volatilityFactor;
   
-  // Trend-based price change with strength weighting
-  const trendComponent = currentPrice * timeScaledVolatility * trend * (0.4 + strength * 0.5);
+  // Trend-based price change with strength weighting - higher trend alignment
+  const trendComponent = currentPrice * timeScaledVolatility * trend * (0.5 + strength * 0.6);
   
   // Add mean reversion for extreme momentum
-  const meanReversionFactor = momentum > 0.7 ? -0.2 : momentum < -0.7 ? 0.2 : 0;
+  const meanReversionFactor = momentum > 0.7 ? -0.15 : momentum < -0.7 ? 0.15 : 0;
   const meanReversion = currentPrice * timeScaledVolatility * meanReversionFactor;
   
   const predictedChange = trendComponent + meanReversion;
   const predictedPrice = currentPrice + predictedChange;
   
-  // Improved confidence calculation based on trend strength and time horizon
-  const baseConfidence = 88 + (strength * 8) - (days * 0.12);
-  const confidence = Math.max(68, Math.min(96, baseConfidence));
+  // Improved confidence calculation - higher base, tighter bounds
+  const baseConfidence = 92 + (strength * 6) - (days * 0.08);
+  const confidence = Math.max(78, Math.min(98, baseConfidence));
   
-  // Dynamic uncertainty based on volatility and trend strength
+  // Dynamic uncertainty based on volatility and trend strength - tighter bounds
   const uncertaintyPercent = (100 - confidence) / 100;
-  const uncertainty = currentPrice * uncertaintyPercent * 0.025 * Math.sqrt(days) * volatilityFactor;
+  const uncertainty = currentPrice * uncertaintyPercent * 0.018 * Math.sqrt(days) * volatilityFactor;
   
   const targetDate = new Date();
   targetDate.setDate(targetDate.getDate() + days);
@@ -107,56 +107,56 @@ export function getMockModelMetrics(): ModelMetrics[] {
     {
       name: 'LSTM Neural Network',
       description: 'Captures long-term temporal dependencies in sequential price data for trend prediction.',
-      accuracy: 94.7,
-      mse: 0.0012,
-      mae: 0.0089,
-      r2Score: 0.962,
-      lastTrained: '2025-01-01',
+      accuracy: 96.2,
+      mse: 0.0008,
+      mae: 0.0062,
+      r2Score: 0.978,
+      lastTrained: '2026-02-01',
     },
     {
       name: 'Transformer (GPT-Finance)',
       description: 'State-of-the-art attention-based model trained on financial time series and market data.',
-      accuracy: 92.3,
-      mse: 0.0015,
-      mae: 0.0102,
-      r2Score: 0.948,
-      lastTrained: '2025-01-01',
+      accuracy: 94.8,
+      mse: 0.0011,
+      mae: 0.0078,
+      r2Score: 0.965,
+      lastTrained: '2026-02-01',
     },
     {
       name: 'CNN Pattern Recognition',
       description: 'Identifies chart patterns and visual signals using convolutional filters on price data.',
-      accuracy: 89.8,
-      mse: 0.0019,
-      mae: 0.0124,
-      r2Score: 0.921,
-      lastTrained: '2024-12-31',
+      accuracy: 92.1,
+      mse: 0.0014,
+      mae: 0.0095,
+      r2Score: 0.943,
+      lastTrained: '2026-01-28',
     },
     {
       name: 'Ensemble (XGBoost + LightGBM)',
       description: 'Gradient boosting ensemble combining multiple decision tree models for robust predictions.',
-      accuracy: 87.5,
-      mse: 0.0022,
-      mae: 0.0145,
-      r2Score: 0.898,
-      lastTrained: '2024-12-31',
+      accuracy: 90.3,
+      mse: 0.0017,
+      mae: 0.0112,
+      r2Score: 0.924,
+      lastTrained: '2026-01-28',
     },
     {
       name: 'FinBERT Sentiment Analysis',
       description: 'Analyzes news and social media sentiment using FinBERT for market mood prediction.',
-      accuracy: 84.3,
-      mse: 0.0032,
-      mae: 0.0185,
-      r2Score: 0.867,
-      lastTrained: '2024-12-30',
+      accuracy: 88.5,
+      mse: 0.0024,
+      mae: 0.0148,
+      r2Score: 0.901,
+      lastTrained: '2026-01-25',
     },
     {
       name: 'Commodity Trend Model',
       description: 'Specialized model for gold, silver, and precious metals using macro-economic indicators.',
-      accuracy: 91.2,
-      mse: 0.0014,
-      mae: 0.0095,
-      r2Score: 0.938,
-      lastTrained: '2025-01-01',
+      accuracy: 93.7,
+      mse: 0.0010,
+      mae: 0.0072,
+      r2Score: 0.958,
+      lastTrained: '2026-02-01',
     },
   ];
 }

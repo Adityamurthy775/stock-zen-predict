@@ -346,6 +346,18 @@ serve(async (req) => {
       });
     }
 
+    // Reset API usage counters (called when user saves new API keys)
+    if (action === 'reset_usage') {
+      apiUsageTracker.clear();
+      scrapingStats.calls = 0;
+      scrapingStats.successes = 0;
+      scrapingStats.failures = 0;
+      scrapingStats.lastUsed = 0;
+      return new Response(JSON.stringify({ success: true, message: 'Usage counters reset' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     // Helper to format symbol for Alpha Vantage
     const formatSymbolForAlphaVantage = (sym: string): string => {
       const { baseSymbol, exchange, isIndian } = normalizeSymbol(sym);

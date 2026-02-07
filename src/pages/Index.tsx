@@ -222,6 +222,8 @@ const Index = () => {
                           onPeriodChange={changePredictionPeriod}
                           isMarketClosed={!marketStatus.isOpen}
                           stockSymbol={selectedStock.symbol}
+                          currentPrice={selectedStock.price}
+                          currency={selectedStock.currency}
                         />
                         <NewsSection news={news} />
                         <BestStockOfDay stocks={stocks} />
@@ -241,6 +243,8 @@ const Index = () => {
                           onPeriodChange={changePredictionPeriod}
                           isMarketClosed={!marketStatus.isOpen}
                           stockSymbol={selectedStock.symbol}
+                          currentPrice={selectedStock.price}
+                          currency={selectedStock.currency}
                         />
                       </TabsContent>
 

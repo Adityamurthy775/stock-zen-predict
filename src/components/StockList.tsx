@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
-import { Search, Plus, TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { Search, Plus, TrendingUp, TrendingDown, Loader2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { searchSymbols } from '@/services/stockService';
 import type { Stock } from '@/types/stock';
@@ -21,6 +21,7 @@ export function StockList({
   selectedStock,
   onSelectStock,
   onAddStock,
+  onRemoveStock,
 }: StockListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{symbol: string; name: string; type: string; exchange: string}>>([]);
@@ -88,27 +89,24 @@ export function StockList({
             if (!aNameStarts && bNameStarts) return 1;
             return 0;
           })
-          .slice(0, 10); // Limit to 10 results for faster rendering
+          .slice(0, 10);
         
         // Cache results immediately
         searchCache.set(query.toUpperCase(), filteredResults.length > 0 ? filteredResults : results.slice(0, 10));
         setSearchResults(filteredResults.length > 0 ? filteredResults : results.slice(0, 10));
       } catch (error) {
-        // Ignore abort errors
         if ((error as Error).name !== 'AbortError') {
           console.error('Search error:', error);
         }
       } finally {
         setIsSearching(false);
       }
-    }, 100); // Reduced debounce for faster response
+    }, 100);
   }, []);
 
   const handleAddStock = useCallback((symbol: string) => {
     setIsAdding(symbol);
-    // Don't await - let it run in background for instant UI feedback
     onAddStock(symbol);
-    // Clear UI immediately for snappy response
     setTimeout(() => {
       setIsAdding(null);
       setSearchQuery('');
@@ -129,28 +127,19 @@ export function StockList({
     return volume.toString();
   };
 
-  // List of known Indian stock symbols (without exchange suffix)
-  const INDIAN_STOCK_SYMBOLS = [
-    'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'HINDUNILVR', 'SBIN',
-    'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT', 'AXISBANK', 'WIPRO', 'ASIANPAINT',
-    'MARUTI', 'HCLTECH', 'SUNPHARMA', 'TITAN', 'ULTRACEMCO', 'BAJFINANCE'
-  ];
-
-  const isIndianStock = (symbol: string) => {
-    const upperSymbol = symbol.toUpperCase();
-    return symbol.includes('.NS') || symbol.includes('.BSE') || symbol.includes('.BO') || 
-           symbol.includes('NSE:') || symbol.includes('BSE:') ||
-           INDIAN_STOCK_SYMBOLS.includes(upperSymbol) ||
-           INDIAN_STOCK_SYMBOLS.some(s => upperSymbol.includes(s));
-  };
-
-  const formatPrice = (price: number, symbol: string) => {
-    const currencySymbol = isIndianStock(symbol) ? '₹' : '$';
+  const formatPrice = (price: number, currency: string) => {
+    const currencySymbol = currency === 'INR' ? '₹' : '$';
     return `${currencySymbol}${price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatSymbol = (symbol: string) => {
     return symbol.split(':')[0];
+  };
+
+  const isIndianExchange = (exchange?: string) => {
+    if (!exchange) return false;
+    return exchange.includes('NSE') || exchange.includes('BSE') || 
+           exchange.includes('National Stock Exchange') || exchange.includes('Bombay');
   };
 
   return (
@@ -175,11 +164,9 @@ export function StockList({
           {searchResults.length > 0 && (
             <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-card overflow-hidden max-h-[300px] overflow-y-auto">
               {searchResults.map((result) => {
-                const isIndian = isIndianStock(result.symbol) || 
-                  result.exchange?.includes('NSE') || 
-                  result.exchange?.includes('BSE') ||
-                  result.exchange?.includes('National Stock Exchange') ||
-                  result.exchange?.includes('Bombay');
+                const isIndian = result.symbol && (
+                  result.symbol.includes('.NS') || result.symbol.includes('.BO') || result.symbol.includes('.BSE')
+                ) || isIndianExchange(result.exchange);
                 const currencyLabel = isIndian ? '₹ INR' : '$ USD';
                 
                 return (
@@ -215,7 +202,9 @@ export function StockList({
       {/* Stock List */}
       <div className="flex-1 overflow-y-auto">
         <div className="p-4">
-          <h3 className="text-sm font-semibold text-muted-foreground mb-3">Tracked Stocks</h3>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-3">
+            Tracked Stocks ({stocks.length})
+          </h3>
           
           <div className="space-y-2">
             {stocks.map((stock) => {
@@ -223,46 +212,62 @@ export function StockList({
               const isPositive = stock.changePercent >= 0;
               
               return (
-                <button
+                <div
                   key={stock.symbol}
-                  onClick={() => onSelectStock(stock)}
                   className={cn(
-                    "w-full p-4 rounded-lg text-left transition-all duration-200",
+                    "group relative w-full p-4 rounded-lg text-left transition-all duration-200",
                     "border hover:shadow-card",
                     isSelected
                       ? "bg-secondary border-gain/30 shadow-glow"
                       : "bg-card border-border hover:border-muted-foreground/30"
                   )}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-foreground">{formatSymbol(stock.symbol)}</span>
-                        <span className={cn(
-                          "flex items-center text-sm font-medium",
-                          isPositive ? "text-gain" : "text-loss"
-                        )}>
-                          {isPositive ? (
-                            <TrendingUp className="w-3 h-3 mr-1" />
-                          ) : (
-                            <TrendingDown className="w-3 h-3 mr-1" />
-                          )}
-                          {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
-                        </span>
+                  {/* Remove button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRemoveStock(stock.symbol);
+                    }}
+                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                    title="Remove stock"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                  
+                  <button
+                    onClick={() => onSelectStock(stock)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-foreground">{formatSymbol(stock.symbol)}</span>
+                          <span className={cn(
+                            "flex items-center text-sm font-medium",
+                            isPositive ? "text-gain" : "text-loss"
+                          )}>
+                            {isPositive ? (
+                              <TrendingUp className="w-3 h-3 mr-1" />
+                            ) : (
+                              <TrendingDown className="w-3 h-3 mr-1" />
+                            )}
+                            {isPositive ? '+' : ''}{stock.changePercent.toFixed(2)}%
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-0.5 truncate max-w-[180px]">{stock.name}</p>
+                        <p className="text-lg font-semibold text-foreground mt-1 font-mono tabular-nums">
+                          {formatPrice(stock.price, stock.currency)}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-0.5 truncate max-w-[180px]">{stock.name}</p>
-                      <p className="text-lg font-semibold text-foreground mt-1 font-mono tabular-nums">
-                        {formatPrice(stock.price, stock.symbol)}
-                      </p>
+                      
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">
+                          Vol: {formatVolume(stock.volume)}
+                        </p>
+                      </div>
                     </div>
-                    
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">
-                        Vol: {formatVolume(stock.volume)}
-                      </p>
-                    </div>
-                  </div>
-                </button>
+                  </button>
+                </div>
               );
             })}
           </div>

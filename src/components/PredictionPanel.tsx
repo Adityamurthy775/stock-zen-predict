@@ -23,22 +23,8 @@ interface PredictionPanelProps {
   isMarketClosed?: boolean;
   stockSymbol?: string;
   currentPrice?: number;
+  currency?: string;
 }
-
-// Known Indian stock symbols
-const INDIAN_STOCK_SYMBOLS = [
-  'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'ICICIBANK', 'HINDUNILVR', 'SBIN',
-  'BHARTIARTL', 'ITC', 'KOTAKBANK', 'LT', 'AXISBANK', 'WIPRO', 'ASIANPAINT',
-  'MARUTI', 'HCLTECH', 'SUNPHARMA', 'TITAN', 'ULTRACEMCO', 'BAJFINANCE'
-];
-
-const isIndianStock = (symbol: string) => {
-  const upperSymbol = symbol.toUpperCase();
-  return symbol.includes('.NS') || symbol.includes('.BSE') || symbol.includes('.BO') || 
-         symbol.includes('NSE:') || symbol.includes('BSE:') ||
-         INDIAN_STOCK_SYMBOLS.includes(upperSymbol) ||
-         INDIAN_STOCK_SYMBOLS.some(s => upperSymbol.includes(s));
-};
 
 // Generate prediction chart data with dotted forecast line
 const generatePredictionChartData = (
@@ -113,9 +99,9 @@ const generatePredictionChartData = (
   return data;
 };
 
-export function PredictionPanel({ prediction, period, onPeriodChange, isMarketClosed, stockSymbol = '', currentPrice }: PredictionPanelProps) {
+export function PredictionPanel({ prediction, period, onPeriodChange, isMarketClosed, stockSymbol = '', currentPrice, currency }: PredictionPanelProps) {
   const isPositive = prediction.changePercent >= 0;
-  const currencySymbol = isIndianStock(stockSymbol) ? '₹' : '$';
+  const currencySymbol = currency === 'INR' ? '₹' : '$';
   const actualCurrentPrice = currentPrice || prediction.predictedPrice - prediction.priceChange;
   
   const chartData = useMemo(() => {

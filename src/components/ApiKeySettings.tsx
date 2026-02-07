@@ -145,7 +145,7 @@ export function ApiKeySettings() {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Filter out empty keys
     const filteredKeys = Object.fromEntries(
       Object.entries(tempKeys).filter(([_, value]) => value.trim() !== '')
@@ -153,8 +153,21 @@ export function ApiKeySettings() {
     
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(filteredKeys));
     setApiKeys(filteredKeys);
-    setShowSuccess(true);
     
+    // Reset API usage counters on the backend when new keys are saved
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/stock-data`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'reset_usage' }),
+      });
+      // Refresh usage stats
+      await fetchApiUsage();
+    } catch (e) {
+      console.error('Failed to reset API usage:', e);
+    }
+    
+    setShowSuccess(true);
     setTimeout(() => {
       setShowSuccess(false);
     }, 2000);
