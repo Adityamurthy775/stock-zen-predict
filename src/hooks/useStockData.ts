@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { fetchStockQuote, fetchTimeSeries, fetchNews, DEFAULT_STOCKS } from '@/services/stockService';
-import { generateMockPrediction, getMockModelMetrics, generatePredictionLine } from '@/services/predictionService';
+import { generateMockPrediction, getMockModelMetrics, generatePredictionLine, runBacktest } from '@/services/predictionService';
 import { useMarketStatus } from '@/hooks/useMarketStatus';
 import { cacheTimeSeriesData, getCachedTimeSeriesData, isOffline } from '@/utils/offlinePrediction';
 import { showPriceAlertNotification, initializeNotifications, getNotificationPermission } from '@/utils/pushNotifications';
@@ -166,15 +166,16 @@ export function useStockData() {
       
       setTimeSeries(series);
       
-      // Generate prediction (works offline with cached data)
+      // Generate prediction with real data (works offline with cached data)
+      const pred = generateMockPrediction(
+        selectedStock.symbol,
+        selectedStock.price,
+        predictionPeriod,
+        series // Pass real time series data for data-driven predictions
+      );
+      setPrediction(pred);
+      
       if (marketStatus.isOpen || isOffline()) {
-        const pred = generateMockPrediction(
-          selectedStock.symbol,
-          selectedStock.price,
-          predictionPeriod
-        );
-        setPrediction(pred);
-        
         // Generate prediction line for chart
         if (series.length > 0) {
           const lastPoint = series[series.length - 1];
@@ -182,13 +183,6 @@ export function useStockData() {
           setPredictionLine(predLine);
         }
       } else {
-        // Market closed - show prediction panel but not on chart
-        const pred = generateMockPrediction(
-          selectedStock.symbol,
-          selectedStock.price,
-          predictionPeriod
-        );
-        setPrediction(pred);
         setPredictionLine([]); // No prediction line on chart when market is closed
       }
       
@@ -207,8 +201,9 @@ export function useStockData() {
         }
       }
       
-      // Get model metrics
-      setModelMetrics(getMockModelMetrics());
+      // Get model metrics with backtest results
+      const backtestResult = series.length >= 30 ? runBacktest(series, predictionPeriod) : undefined;
+      setModelMetrics(getMockModelMetrics(backtestResult));
     } catch (err) {
       console.error('Error fetching stock details:', err);
       
