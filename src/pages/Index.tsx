@@ -6,7 +6,7 @@ import { StockChart } from '@/components/StockChart';
 import { StockHistory } from '@/components/StockHistory';
 import { PredictionPanel } from '@/components/PredictionPanel';
 import { NewsSection } from '@/components/NewsSection';
-import { ModelsPanel } from '@/components/ModelsPanel';
+import { ModelsPanel } from '@/components/features/ModelsPanel';
 import { MarketStats } from '@/components/MarketStats';
 import { MarketStatusIndicator } from '@/components/MarketStatusIndicator';
 import { Portfolio } from '@/components/Portfolio';
@@ -18,7 +18,7 @@ import { StockChatbot } from '@/components/StockChatbot';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiKeySettings } from '@/components/ApiKeySettings';
-import { MarketGlossary } from '@/components/MarketGlossary';
+import GlossaryTab from '@/components/features/GlossaryTab';
 import { ModelExplanation } from '@/components/ModelExplanation';
 import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target, BookOpen, Cpu } from 'lucide-react';
 import { PredictionAccuracy } from '@/components/PredictionAccuracy';
@@ -276,7 +276,7 @@ const Index = () => {
                       </TabsContent>
 
                       <TabsContent value="glossary" className="mt-6">
-                        <MarketGlossary />
+                        <GlossaryTab />
                       </TabsContent>
 
                       <TabsContent value="how-it-works" className="mt-6">
