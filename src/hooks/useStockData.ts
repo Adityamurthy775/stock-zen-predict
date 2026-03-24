@@ -167,7 +167,7 @@ export function useStockData() {
       setTimeSeries(series);
       
       // Generate prediction with real data (works offline with cached data)
-      const pred = generateMockPrediction(
+      const pred = await generateMockPrediction(
         selectedStock.symbol,
         selectedStock.price,
         predictionPeriod,

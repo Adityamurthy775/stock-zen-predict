@@ -311,12 +311,39 @@ export function runBacktest(timeSeries: TimeSeriesPoint[], period: PredictionPer
 }
 
 // ── Main Prediction Engine ─────────────────────────────────────────────
-export function generateMockPrediction(
+export async function generateMockPrediction(
   symbol: string,
   currentPrice: number,
   period: PredictionPeriod,
   timeSeries?: TimeSeriesPoint[]
-): Prediction {
+): Promise<Prediction> {
+  try {
+    const response = await fetch(`http://localhost:5000/api/predict?symbol=${symbol}&period=${period}`);
+    if (response.ok) {
+       const data = await response.json();
+       
+       const targetDate = new Date();
+       targetDate.setDate(targetDate.getDate() + (data.lookahead_days || 30));
+       
+       const predictedPrice = data.predicted_price;
+       const change = predictedPrice - currentPrice;
+       
+       return {
+         targetDate: targetDate.toISOString().split('T')[0],
+         predictedPrice: Math.round(predictedPrice * 100) / 100,
+         currentPrice,
+         priceChange: Math.round(change * 100) / 100,
+         changePercent: Math.round((change / currentPrice) * 10000) / 100,
+         confidence: Math.round(data.confidence * 100),
+         lowerBound: Math.round((predictedPrice * 0.95) * 100) / 100,
+         upperBound: Math.round((predictedPrice * 1.05) * 100) / 100,
+         trend: data.trend,
+       };
+    }
+  } catch (err) {
+    console.warn("Failed to fetch prediction from Node.js backend, falling back to local simulation.", err);
+  }
+
   const periodDays: Record<PredictionPeriod, number> = { '1d': 1, '5d': 5, '15d': 15, '3m': 90 };
   const days = periodDays[period];
   const sectorProfile = getSectorProfile(symbol);
