@@ -6,7 +6,7 @@ import { StockChart } from '@/components/StockChart';
 import { StockHistory } from '@/components/StockHistory';
 import { PredictionPanel } from '@/components/PredictionPanel';
 import { NewsSection } from '@/components/NewsSection';
-import { ModelsPanel } from '@/components/ModelsPanel';
+import { ModelsPanel } from '@/components/features/ModelsPanel';
 import { MarketStats } from '@/components/MarketStats';
 import { MarketStatusIndicator } from '@/components/MarketStatusIndicator';
 import { Portfolio } from '@/components/Portfolio';
