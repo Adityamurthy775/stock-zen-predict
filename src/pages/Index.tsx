@@ -18,7 +18,7 @@ import { StockChatbot } from '@/components/StockChatbot';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiKeySettings } from '@/components/ApiKeySettings';
-import { MarketGlossary } from '@/components/MarketGlossary';
+import GlossaryTab from '@/components/features/GlossaryTab';
 import { ModelExplanation } from '@/components/ModelExplanation';
 import { TrendingUp, Wallet, Bell, LayoutDashboard, History, Brain, ChartLine, Star, GitCompareArrows, Target, BookOpen, Cpu } from 'lucide-react';
 import { PredictionAccuracy } from '@/components/PredictionAccuracy';
