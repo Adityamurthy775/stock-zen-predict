@@ -27,7 +27,7 @@ export function StockList({
   const [searchResults, setSearchResults] = useState<Array<{symbol: string; name: string; type: string; exchange: string}>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isAdding, setIsAdding] = useState<string | null>(null);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const handleSearch = useCallback(async (query: string) => {

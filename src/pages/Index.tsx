@@ -276,7 +276,7 @@ const Index = () => {
                       </TabsContent>
 
                       <TabsContent value="glossary" className="mt-6">
-                        <MarketGlossary />
+                        <GlossaryTab />
                       </TabsContent>
 
                       <TabsContent value="how-it-works" className="mt-6">
