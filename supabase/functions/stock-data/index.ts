@@ -569,7 +569,7 @@ serve(async (req) => {
 
       // For any remaining symbols not fetched, use Yahoo Finance scraping
       const fetchedSymbols = new Set(results.map(r => r.symbol.toUpperCase()));
-      const remaining = requested.filter(sym => {
+      const remaining = requested.filter((sym: string) => {
         const baseSym = sym.split(':')[0].replace('.NS', '').replace('.BO', '').replace('.BSE', '').toUpperCase();
         return !fetchedSymbols.has(baseSym);
       });
